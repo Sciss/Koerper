@@ -15,7 +15,7 @@ package de.sciss.koerper
 
 import javax.swing.JFrame
 
-import com.github.sarxos.webcam.{Webcam, WebcamPanel, WebcamResolution}
+import com.github.sarxos.webcam.{Webcam, WebcamPanel}
 
 import scala.collection.JavaConverters._
 import scala.swing.{Dimension, Swing}

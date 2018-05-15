@@ -1,10 +1,10 @@
-name         := "Koerper"
+name         := "Koerper-WebCam"
 version      := "0.1.0-SNAPSHOT"
 description  := "An algorithmic art project (sound installation)"
 organization := "de.sciss"
 homepage     := Some(url(s"https://github.com/Sciss/${name.value}"))
 licenses     := Seq("gpl v2+" -> url("http://www.gnu.org/licenses/gpl-2.0.txt"))
-scalaVersion := "2.12.4"
+scalaVersion := "2.12.5"
 
 scalacOptions ++= Seq("-deprecation", "-unchecked", "-feature", "-Xfuture", "-encoding", "utf8", "-Xlint")
 
@@ -33,13 +33,13 @@ libraryDependencies ++= Seq(
 lazy val deps = new {
   val main = new {
     val fileUtil   = "1.1.3"
-    val swingPlus  = "0.2.4"
-    val numbers    = "0.1.4"
-    val kollflitz  = "0.2.1"
-    val scalaOSC   = "1.1.5"
+    val swingPlus  = "0.3.0"
+    val numbers    = "0.1.5"
+    val kollflitz  = "0.2.2"
+    val scalaOSC   = "1.1.6"
     val neuralGas  = "2.3.1"
     val scopt      = "3.7.0"
-    val webcam     = "0.3.10"
+    val webcam     = "0.3.12"
     val bridj      = "0.7.0"
     val imageio    = "3.1.2"
   }
