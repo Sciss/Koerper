@@ -39,7 +39,7 @@ object Calibration {
     val specCalb  = AudioFile.readSpec(fCalib)
 //    require (specIn.sampleRate == sr)
     require (specCalb.numFrames == numBands)
-    val tempOut   = file("/data/temp/test-remove-%d.png")
+    val tempOut   = file("/data/temp/test-removeQ-%d.png")
 
     val g = Graph {
       import graph._
@@ -63,16 +63,19 @@ object Calibration {
 //        val dct       = DCT_II(rot, size = numWin, numCoeffs = dctNum /* numWin */)
 //        val dctNum    = (numWin + 1).nextPowerOfTwo >> 2
         val rotT      = if (fftSize == numWin) rot else ResizeWindow(rot, size = numWin, stop = fftSize - numWin)
+
         val dct0      = Real1FFT(rotT, size = fftSize, mode = 2) * 90.50967  // gain is arbitrary
-        val dct       = dct0.complex.mag
+//        val dct       = dct0.complex.mag
+        val dct = ConstQ(dct0, minFreqN = 0.0064, fftSize = fftSize, numBands = dctNum).sqrt * 2 // * 256 // 90.50967
+
         RunningMin(dct).last.poll(0, "min")
         RunningMax(dct).last.poll(0, "max")
-        Length    (in)      .poll(0, "len-in")
-        Length    (constQ)  .poll(0, "len-cq")
-        Length    (thresh)  .poll(0, "len-thresh")
-        Length    (rot)     .poll(0, "len-rot")
-        Length    (dct0)    .poll(0, "len-dct0")
-        Length    (dct)     .poll(0, "len-dct")
+//        Length    (in)      .poll(0, "len-in")
+//        Length    (constQ)  .poll(0, "len-cq")
+//        Length    (thresh)  .poll(0, "len-thresh")
+//        Length    (rot)     .poll(0, "len-rot")
+//        Length    (dct0)    .poll(0, "len-dct0")
+//        Length    (dct)     .poll(0, "len-dct")
         val max       = dct.ampDb.linLin(dbMin, dbMax, 0.0, 1.0).clip()
         val specOut   = ImageFile.Spec(width = dctNum, height = numBands, numChannels = 1)
         ImageFileOut(file = fOut, spec = specOut, in = max)
