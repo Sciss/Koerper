@@ -8,7 +8,7 @@ import de.sciss.kollflitz.Vec
 import de.sciss.numbers.Implicits._
 import javax.imageio.ImageIO
 
-import scala.math.{acos, atan2, cos, sin}
+import scala.math._
 
 object Voronoi {
 /*
@@ -45,6 +45,11 @@ object Voronoi {
     }
 
     def centralAngle(that: Pt3): Double = {
+      val d = this distance that
+      2 * asin(d/2)
+    }
+
+    def centralAngleBla(that: Pt3): Double = {
       val thetaA  = acos(this.z)
       val phiA    = atan2(this.y, this.x)
       val latA    = PiH - thetaA
@@ -54,6 +59,8 @@ object Voronoi {
       val phiB    = atan2(that.y, that.x)
       val latB    = PiH - thetaB
       val lonB    = phiB
+
+//      2 * asin(sqrt(sin((latA absDif latB)/2).squared + cos(latA) * cos(latB) * sin((lonA absDif lonB)/2).squared))
 
       acos(latA.sin * latB.sin + latA.cos * latB.cos * (lonA absDif lonB).cos)
     }
@@ -204,8 +211,8 @@ object Voronoi {
 //              val p1 = p0.copy(lat = p0.lat + rot.toRadians)
 //              p1.toCartesian
             }
-            val tc  = voronoiCentersPt3.maxBy(_.dot(v))
-//            val tc  = voronoiCentersPt3.minBy(_.centralAngle(v))
+//            val tc  = voronoiCentersPt3.maxBy(_.dot(v))
+            val tc  = voronoiCentersPt3.minBy(_.centralAngle(v))
             val tb  = voronoiCornersPt3.minBy(_.centralAngle(v))
             val col = {
               if (true || tb.centralAngle(v) > 0.05) {
