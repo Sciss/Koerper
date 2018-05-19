@@ -27,9 +27,13 @@ object Voronoi {
   private final val PiH = math.Pi/2
 
   final case class Pt3(x: Double, y: Double, z: Double) {
+    override def toString = f"$productPrefix($x%g, $y%g, $z%g)"
+
     def length: Double = (x.squared + y.squared + z.squared).sqrt
 
     def * (d: Double): Pt3 = Pt3(x * d, y * d, z * d)
+
+    def + (that: Pt3): Pt3 = Pt3(this.x + that.x, this.y + that.y, this.z + that.z)
 
     def normalized: Pt3 = this * length.reciprocal
 
@@ -43,6 +47,15 @@ object Voronoi {
       val dz = this.z - that.z
       dx.squared + dy.squared + dz.squared
     }
+
+    def cross(that: Pt3): Pt3 = {
+      val xOut = this.y * that.z - this.z * that.y
+      val yOut = this.z * that.x - this.x * that.z
+      val zOut = this.x * that.y - this.y * that.x
+      Pt3(xOut, yOut, zOut)
+    }
+
+    def normalizedCross (that: Pt3): Pt3 = (this cross that).normalized
 
     private def r8_asin(s: Double): Double = asin(s.clip2(1.0))
 
@@ -257,6 +270,16 @@ object Voronoi {
     Pt3( 0.6693041068410891, -0.5111863835405318,  0.5391850274705374)
   )
 
+  val voronoiPolygons: Vec[Vec[Int]] = Vector(
+    Vector(0, 1, 3, 2),
+    Vector(0, 2, 4, 5),
+    Vector(0, 5, 1),
+    Vector(2, 3, 4),
+    Vector(1, 5, 4, 3)
+  )
+
+  val voronoiOrders: Vec[Int] = voronoiPolygons.map(_.size)
+
   /*
 
     Voronoi orders:
@@ -285,6 +308,10 @@ object Voronoi {
 
    */
 
+  implicit class ScalarOps(private val v: Double) extends AnyVal {
+    def * (pt: Pt3): Pt3 = pt * v
+  }
+
   def main(args: Array[String]): Unit =
     testRender()
 
@@ -293,7 +320,19 @@ object Voronoi {
     val lightRef  = Pt3(-0.7, -0.7, 1).normalized
     val img       = new BufferedImage(extent, extent, BufferedImage.TYPE_INT_ARGB)
 
-    val testPt    = voronoiCentersPt3(1).rotateX(-10.toRadians).rotateY(-5.toRadians)
+    val c0        = voronoiCentersPt3(1)
+    val testPt    = c0.rotateX(-10.toRadians).rotateY(13.toRadians)
+    val B         = voronoiCornersPt3(voronoiPolygons(1)(0))
+    val D         = voronoiCornersPt3(voronoiPolygons(1)(1))
+    val n         = B normalizedCross D
+//    val N         = c0 cross testPt
+    val N         = testPt cross c0
+    val v         = n cross B
+    val H0        = -(N dot v) * B + (N dot B) * v
+    val H         = H0.normalized
+    val pos       = 1.0 - (H.centralAngle(testPt) / H.centralAngle(c0))
+    println(s"B = $B, D = $D, c0 = $c0, testPt = $testPt, H = $H")
+    println(f"pos = $pos%g")
 
     (0 to 0).zipWithIndex.foreach { case (rot, ri) =>
       for (xi <- 0 until extent) {
@@ -317,9 +356,13 @@ object Voronoi {
 //            val tc  = voronoiCentersPt3.maxBy(_.dot(v))
             val tc  = voronoiCentersPt3.minBy(_.centralAngle(v))
 //            val tb  = voronoiCornersPt3.minBy(_.centralAngle(v))
-            val da = 0.05
+            val da = 0.04
             val col = {
-              if (tc.centralAngle(v) < da || testPt.centralAngle(v) < da) {
+              if (v.centralAngle(H) < da) {
+                Color.white
+              } else
+              if (v.centralAngle(c0) < da || v.centralAngle(testPt) < da ||
+                v.centralAngle(B) < da || v.centralAngle(D) < da) {
                 Color.darkGray
               } else {
                 val hue = voronoiCentersPt3.indexOf(tc).linLin(0, voronoiCentersPt3.size, 0f, 1f)
