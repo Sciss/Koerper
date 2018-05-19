@@ -44,7 +44,80 @@ object Voronoi {
       dx.squared + dy.squared + dz.squared
     }
 
+    private def r8_asin(s: Double): Double = asin(s.clip2(1.0))
+
+    // http://people.sc.fsu.edu/~jburkardt/m_src/geometry/r8_atan.m
+    // John Burkardt, LGPL
+    private def r8_atan(y: Double, x: Double): Double =
+      if (x == 0.0) {
+        if (y > 0.0)
+          Pi / 2.0
+        else if (y < 0.0)
+          3.0 * Pi / 2.0
+        else /* if (y == 0.0) */
+          0.0
+
+      } else if (y == 0.0) {
+        if (x > 0.0)
+          0.0
+        else
+          Pi
+
+      } else {
+        // We assume that ATAN2 is correct when both arguments are positive.
+
+        val abs_y = abs(y)
+        val abs_x = abs(x)
+
+        val theta_0 = atan2(abs_y, abs_x)
+
+        if (x > 0.0 && y > 0.0)
+          theta_0
+        else if (x < 0.0 && y > 0.0)
+          Pi - theta_0
+        else if (x < 0.0 && y < 0.0)
+          Pi + theta_0
+        else /* if (x > 0.0 && y < 0.0) */
+          2.0 * Pi - theta_0
+      }
+
+    def centralAngleBlala(that: Pt3): Double = {
+      val lat1 = r8_asin(this.z)
+      val lon1 = r8_atan(this.y, this.x)
+
+      val lat2 = r8_asin(that.z)
+      val lon2 = r8_atan(that.y, that.x)
+
+      val topSq = (cos(lat2) * sin(lon1 - lon2)).squared +
+                  (cos(lat1) * sin(lat2) -
+                   sin(lat1) * cos(lat2) * cos(lon1 - lon2)).squared
+
+      val top = sqrt(topSq)
+
+      val bot = sin(lat1) * sin(lat2) +
+                cos(lat1) * cos(lat2) * cos(lon1 - lon2)
+
+      val dist = atan2 ( top, bot )
+      dist
+    }
+
     def centralAngle(that: Pt3): Double = {
+      val lat1 = r8_asin(this.z)
+      val lon1 = r8_atan(this.y, this.x)
+
+      val lat2 = r8_asin(that.z)
+      val lon2 = r8_atan(that.y, that.x)
+
+      val sSq = sin((lat1 - lat2) / 2.0).squared +
+        cos(lat1) * cos(lat2) * sin((lon1 - lon2) / 2.0).squared
+
+      val s = sqrt(sSq)
+
+      val dist = 2.0 * asin(s)
+      dist
+    }
+
+    def centralAngleNo(that: Pt3): Double = {
       val d = this distance that
       2 * asin(d/2)
     }
@@ -184,6 +257,34 @@ object Voronoi {
     Pt3( 0.6693041068410891, -0.5111863835405318,  0.5391850274705374)
   )
 
+  /*
+
+    Voronoi orders:
+
+     1:      4
+     2:      4
+     3:      3
+     4:      3
+     5:      4
+
+  Voronoi polygons:
+
+    1:         1         2         4         3
+    2:         1         3         5         6
+    3:         1         6         2
+    4:         3         4         5
+    5:         2         6         5         4
+
+  Voronoi areas:
+
+     1:     2.636232
+     2:     2.636232
+     3:     2.328837
+     4:     2.328837
+     5:     2.636232
+
+   */
+
   def main(args: Array[String]): Unit =
     testRender()
 
@@ -192,17 +293,19 @@ object Voronoi {
     val lightRef  = Pt3(-0.7, -0.7, 1).normalized
     val img       = new BufferedImage(extent, extent, BufferedImage.TYPE_INT_ARGB)
 
-    (0 until 120).zipWithIndex.foreach { case (rot, ri) =>
+    val testPt    = voronoiCentersPt3(1).rotateX(-10.toRadians).rotateY(-5.toRadians)
+
+    (0 to 0).zipWithIndex.foreach { case (rot, ri) =>
       for (xi <- 0 until extent) {
         for (yi <- 0 until extent) {
           val x = xi.linLin(0, extent, -1.0, 1.0)
           val y = yi.linLin(0, extent, -1.0, 1.0)
-          val d = math.hypot(x, y)
+          val d = hypot(x, y)
           if (d > 1.0) {
             img.setRGB(xi, yi, 0xFF000000)
           } else {
-            val z   = math.sqrt(1 - d)
-            val v0  = Pt3(x, y, z)
+            val z   = sqrt(1 - d)
+            val v0  = Pt3(x, y, z).normalized // ! this was bloody wrong
             val v   = {
               val v1 = v0.rotateX(rot * 6.toRadians)
               v1.rotateY(rot * 3.0.toRadians)
@@ -213,13 +316,14 @@ object Voronoi {
             }
 //            val tc  = voronoiCentersPt3.maxBy(_.dot(v))
             val tc  = voronoiCentersPt3.minBy(_.centralAngle(v))
-            val tb  = voronoiCornersPt3.minBy(_.centralAngle(v))
+//            val tb  = voronoiCornersPt3.minBy(_.centralAngle(v))
+            val da = 0.05
             val col = {
-              if (true || tb.centralAngle(v) > 0.05) {
+              if (tc.centralAngle(v) < da || testPt.centralAngle(v) < da) {
+                Color.darkGray
+              } else {
                 val hue = voronoiCentersPt3.indexOf(tc).linLin(0, voronoiCentersPt3.size, 0f, 1f)
                 Color.getHSBColor(hue, 1f, 1f)
-              } else {
-                Color.gray
               }
             } .getRGB
             val r   = ((col >> 16) & 0xFF) / 255f
