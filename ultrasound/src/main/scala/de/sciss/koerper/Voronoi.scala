@@ -24,6 +24,8 @@ object Voronoi {
 
  */
 
+  private final val PiH = math.Pi/2
+
   final case class Pt3(x: Double, y: Double, z: Double) {
     def length: Double = (x.squared + y.squared + z.squared).sqrt
 
@@ -41,20 +43,42 @@ object Voronoi {
       val dz = this.z - that.z
       dx.squared + dy.squared + dz.squared
     }
-    
+
     def centralAngle(that: Pt3): Double = {
       val thetaA  = acos(this.z)
       val phiA    = atan2(this.y, this.x)
-      val latA    = math.Pi/2 - thetaA
+      val latA    = PiH - thetaA
       val lonA    = phiA
 
       val thetaB  = acos(that.z)
       val phiB    = atan2(that.y, that.x)
-      val latB    = math.Pi/2 - thetaB
+      val latB    = PiH - thetaB
       val lonB    = phiB
 
       acos(latA.sin * latB.sin + latA.cos * latB.cos * (lonA absDif lonB).cos)
     }
+
+//    def centralAngle(that: Pt3): Double = {
+//      val thetaA  = acos(this.z)
+//      val phiA    = atan2(this.y, this.x)
+//      val latA    = PiH - thetaA
+//      val lonA    = phiA
+//      val cosLatA = cos(latA)
+//      val nax     = cosLatA * cos(lonA)
+//      val nay     = cosLatA * sin(lonA)
+//      val naz     = sin(latA)
+//
+//      val thetaB  = acos(that.z)
+//      val phiB    = atan2(that.y, that.x)
+//      val latB    = PiH - thetaB
+//      val lonB    = phiB
+//      val cosLatB = cos(latB)
+//      val nbx     = cosLatB * cos(lonB)
+//      val nby     = cosLatB * sin(lonB)
+//      val nbz     = sin(latB)
+//
+//      acos(nax * nbx + nay * nby + naz * nbz)
+//    }
 
     def toPolar: Polar = {
       val theta = acos(z)
@@ -65,9 +89,33 @@ object Voronoi {
     def toLatLon: LatLon = {
       val theta = acos(z)
       val phi   = atan2(y, x)
-      val lat   = math.Pi/2 - theta
+      val lat   = PiH - theta
       val lon   = phi
       LatLon(lat, lon)
+    }
+
+    def rotateX(a: Double): Pt3 = {
+      val cosA  = a.cos
+      val sinA  = a.sin
+      val yR    = y*cosA - z*sinA
+      val zR    = y*sinA + z*cosA
+      copy(y = yR, z = zR)
+    }
+
+    def rotateY(a: Double): Pt3 = {
+      val cosA  = a.cos
+      val sinA  = a.sin
+      val xR    = x*cosA - z*sinA
+      val zR    = x*sinA + z*cosA
+      copy(x = xR, z = zR)
+    }
+
+    def rotateZ(a: Double): Pt3 = {
+      val cosA  = a.cos
+      val sinA  = a.sin
+      val xR    = x*cosA - y*sinA
+      val yR    = x*sinA + y*cosA
+      copy(x = xR, y = yR)
     }
   }
 
@@ -78,14 +126,15 @@ object Voronoi {
     */
   final case class Polar(theta: Double, phi: Double) {
     def toCartesian: Pt3 = {
-      val x = sin(theta) * cos(phi)
-      val y = sin(theta) * sin(phi)
+      val sinTheta = sin(theta)
+      val x = sinTheta * cos(phi)
+      val y = sinTheta * sin(phi)
       val z = cos(theta)
       Pt3(x, y, z)
     }
 
     def toLatLon: LatLon = {
-      val lat   = math.Pi/2 - theta
+      val lat   = PiH - theta
       val lon   = phi
       LatLon(lat, lon)
     }
@@ -95,7 +144,7 @@ object Voronoi {
     override def toString = f"[lat: $lat%1.2f, lon: $lon%1.2f]"
 
     def toPolar: Polar = {
-      val theta = math.Pi/2 - lat
+      val theta = PiH - lat
       val phi   = lon
       Polar(theta, phi)
     }
@@ -132,44 +181,56 @@ object Voronoi {
     testRender()
 
   def testRender(): Unit = {
-    val extent = 1024
-    val img = new BufferedImage(extent, extent, BufferedImage.TYPE_INT_ARGB)
-    for (xi <- 0 until extent) {
-      for (yi <- 0 until extent) {
-        val x = xi.linLin(0, extent, -1.0, 1.0)
-        val y = yi.linLin(0, extent, -1.0, 1.0)
-        val d = math.hypot(x, y)
-        if (d > 1.0) {
-          img.setRGB(xi, yi, 0xFF000000)
-        } else {
-          val z   = math.sqrt(1 - d)
-          val v   = Pt3(x, y, z)
-//          val tc  = voronoiCenters.maxBy(_.dot(v))
-          val tc  = voronoiCentersPt3.minBy(_.centralAngle(v))
-          val tb  = voronoiCornersPt3.minBy(_.centralAngle(v))
-          val col = {
-            if (tb.centralAngle(v) > 0.05) {
-              val hue = voronoiCentersPt3.indexOf(tc).linLin(0, voronoiCentersPt3.size, 0f, 1f)
-              Color.getHSBColor(hue, 1f, 1f)
-            } else {
-              Color.gray
+    val extent    = 512
+    val lightRef  = Pt3(-0.7, -0.7, 1).normalized
+    val img       = new BufferedImage(extent, extent, BufferedImage.TYPE_INT_ARGB)
+
+    (0 until 120).zipWithIndex.foreach { case (rot, ri) =>
+      for (xi <- 0 until extent) {
+        for (yi <- 0 until extent) {
+          val x = xi.linLin(0, extent, -1.0, 1.0)
+          val y = yi.linLin(0, extent, -1.0, 1.0)
+          val d = math.hypot(x, y)
+          if (d > 1.0) {
+            img.setRGB(xi, yi, 0xFF000000)
+          } else {
+            val z   = math.sqrt(1 - d)
+            val v0  = Pt3(x, y, z)
+            val v   = {
+              val v1 = v0.rotateX(rot * 6.toRadians)
+              v1.rotateY(rot * 3.0.toRadians)
+//              val p0 = v0.toLatLon
+////              val p1 = p0.copy(lon = p0.lon + rot.toRadians)
+//              val p1 = p0.copy(lat = p0.lat + rot.toRadians)
+//              p1.toCartesian
             }
-          } .getRGB
-          val r   = ((col >> 16) & 0xFF) / 255f
-          val g   = ((col >>  8) & 0xFF) / 255f
-          val b   = ((col >>  0) & 0xFF) / 255f
-          val l   = ((Pt3(x, y, z) dot Pt3(-0.7, -0.7, 1).normalized) + 1.0) / 2.0
-          val rl  = r * l
-          val gl  = g * l
-          val bl  = b * l
-          val rc  = (rl * 255).toInt.clip(0, 255) << 16
-          val gc  = (gl * 255).toInt.clip(0, 255) <<  8
-          val bc  = (bl * 255).toInt.clip(0, 255) <<  0
-          img.setRGB(xi, yi, 0xFF000000 | rc | gc | bc)
+            val tc  = voronoiCentersPt3.maxBy(_.dot(v))
+//            val tc  = voronoiCentersPt3.minBy(_.centralAngle(v))
+            val tb  = voronoiCornersPt3.minBy(_.centralAngle(v))
+            val col = {
+              if (true || tb.centralAngle(v) > 0.05) {
+                val hue = voronoiCentersPt3.indexOf(tc).linLin(0, voronoiCentersPt3.size, 0f, 1f)
+                Color.getHSBColor(hue, 1f, 1f)
+              } else {
+                Color.gray
+              }
+            } .getRGB
+            val r   = ((col >> 16) & 0xFF) / 255f
+            val g   = ((col >>  8) & 0xFF) / 255f
+            val b   = ((col >>  0) & 0xFF) / 255f
+            val l   = (v0.dot(lightRef) + 1.0) / 2.0
+            val rl  = r * l
+            val gl  = g * l
+            val bl  = b * l
+            val rc  = (rl * 255).toInt.clip(0, 255) << 16
+            val gc  = (gl * 255).toInt.clip(0, 255) <<  8
+            val bc  = (bl * 255).toInt.clip(0, 255) <<  0
+            img.setRGB(xi, yi, 0xFF000000 | rc | gc | bc)
+          }
         }
       }
-    }
 
-    ImageIO.write(img, "png", userHome / "test.png")
+      ImageIO.write(img, "png", file(f"/data/temp/foo/test-rot-${ri+1}%03d.png"))
+    }
   }
 }
