@@ -4,6 +4,7 @@ import java.awt.Color
 import java.awt.image.BufferedImage
 
 import de.sciss.file._
+import de.sciss.kollflitz
 import de.sciss.kollflitz.Vec
 import de.sciss.numbers.Implicits._
 import javax.imageio.ImageIO
@@ -313,19 +314,20 @@ object Voronoi {
   }
 
   def main(args: Array[String]): Unit =
-    testRender()
+    testRenderImage()
 
   def testRender(): Unit = {
     val extent    = 512
     val lightRef  = Pt3(-0.7, -0.7, 1).normalized
     val img       = new BufferedImage(extent, extent, BufferedImage.TYPE_INT_ARGB)
 
+    // cf. https://math.stackexchange.com/questions/1720450/arc-intersection-on-a-sphere
     val c0        = voronoiCentersPt3(1)
     val testPt    = c0.rotateX(-10.toRadians).rotateY(13.toRadians)
     val B         = voronoiCornersPt3(voronoiPolygons(1)(0))
     val D         = voronoiCornersPt3(voronoiPolygons(1)(1))
     val n         = B normalizedCross D
-//    val N         = c0 cross testPt
+    //    val N         = c0 cross testPt
     val N         = testPt cross c0
     val v         = n cross B
     val H0        = -(N dot v) * B + (N dot B) * v
@@ -351,14 +353,14 @@ object Voronoi {
             val v   = {
               val v1 = v0.rotateX(rot * 6.toRadians)
               v1.rotateY(rot * 3.0.toRadians)
-//              val p0 = v0.toLatLon
-////              val p1 = p0.copy(lon = p0.lon + rot.toRadians)
-//              val p1 = p0.copy(lat = p0.lat + rot.toRadians)
-//              p1.toCartesian
+              //              val p0 = v0.toLatLon
+              ////              val p1 = p0.copy(lon = p0.lon + rot.toRadians)
+              //              val p1 = p0.copy(lat = p0.lat + rot.toRadians)
+              //              p1.toCartesian
             }
-//            val tc  = voronoiCentersPt3.maxBy(_.dot(v))
+            //            val tc  = voronoiCentersPt3.maxBy(_.dot(v))
             val tc  = voronoiCentersPt3.minBy(_.centralAngle(v))
-//            val tb  = voronoiCornersPt3.minBy(_.centralAngle(v))
+            //            val tb  = voronoiCornersPt3.minBy(_.centralAngle(v))
             val da = 0.04
             val col = {
               if (v.centralAngle(H) < da) {
@@ -388,6 +390,87 @@ object Voronoi {
       }
 
       ImageIO.write(img, "png", file(f"/data/temp/foo/test-rot-${ri+1}%03d.png"))
+    }
+  }
+
+  def testRenderImage(): Unit = {
+    val extent    = 512
+    val lightRef  = Pt3(-0.7, -0.7, 1).normalized
+    val imgIn     = Array.tabulate(5)(ch => ImageIO.read(file(s"/data/projects/Koerper/material/us-test-remove-${ch+1}.png")))
+    val imgOut    = new BufferedImage(extent, extent, BufferedImage.TYPE_INT_ARGB)
+
+    (0 until 120).zipWithIndex.foreach { case (rot, ri) =>
+      for (xi <- 0 until extent) {
+        for (yi <- 0 until extent) {
+          val x = xi.linLin(0, extent, -1.0, 1.0)
+          val y = yi.linLin(0, extent, -1.0, 1.0)
+          val d = hypot(x, y)
+          if (d > 1.0) {
+            imgOut.setRGB(xi, yi, 0xFF000000)
+          } else {
+            val z   = sqrt(1 - d)
+            val v0  = Pt3(x, y, z).normalized
+            val q   = {
+              val v1 = v0.rotateX(rot * 6.toRadians)
+              v1.rotateY(rot * 3.0.toRadians)
+            }
+            val tc    = voronoiCentersPt3.minBy(_.centralAngle(q))
+            val vIdx  = voronoiCentersPt3.indexOf(tc)
+            val col = {
+              if (true || vIdx == 1) {
+                var bestExt     = Double.PositiveInfinity
+                var bestPos1    = 0.0
+                var bestPos2    = 0.0
+                var polyAccum   = 0.0
+                val polyIndices = voronoiPolygons(vIdx)
+                import kollflitz.Ops._
+                polyIndices.foreachPair { (pi1, pi2) =>
+                  val B         = voronoiCornersPt3(pi1)
+                  val D         = voronoiCornersPt3(pi2)
+                  val n         = B normalizedCross D
+                  val N         = q cross tc
+                  val v         = n cross B
+                  val H0        = -(N dot v) * B + (N dot B) * v
+                  val H         = H0.normalized
+                  val ext       = H.centralAngle(tc)
+                  val d3        = B.centralAngle(D)
+                  if (ext < bestExt) {
+                    bestExt       = ext
+//                    bestPos1      = q.centralAngle(tc) / ext
+                    bestPos1      = H.centralAngle(q) / ext
+                    val d1        = B.centralAngle(H)
+                    bestPos2      = polyAccum + d1
+                  }
+                  polyAccum += d3
+                }
+                bestPos2 /= polyAccum
+                // if (bestPos1 > 1.001) println(s"Ooops $bestPos1")
+                val i  = imgIn(vIdx)
+                val iy = (bestPos1 * i.getHeight).toInt.clip(0, i.getHeight - 1)
+                val ix = (bestPos2 * i.getWidth ).toInt.clip(0, i.getWidth - 1)
+                i.getRGB(ix, iy)
+
+              } else {
+                val hue = vIdx.linLin(0, voronoiCentersPt3.size, 0f, 1f)
+                Color.getHSBColor(hue, 1f, 1f).getRGB
+              }
+            }
+            val r   = ((col >> 16) & 0xFF) / 255f
+            val g   = ((col >>  8) & 0xFF) / 255f
+            val b   = ((col >>  0) & 0xFF) / 255f
+            val l   = (v0.dot(lightRef) + 1.0) / 2.0
+            val rl  = r * l
+            val gl  = g * l
+            val bl  = b * l
+            val rc  = (rl * 255).toInt.clip(0, 255) << 16
+            val gc  = (gl * 255).toInt.clip(0, 255) <<  8
+            val bc  = (bl * 255).toInt.clip(0, 255) <<  0
+            imgOut.setRGB(xi, yi, 0xFF000000 | rc | gc | bc)
+          }
+        }
+      }
+
+      ImageIO.write(imgOut, "png", file(f"/data/temp/foo/test-rot-${ri+1}%03d.png"))
     }
   }
 }

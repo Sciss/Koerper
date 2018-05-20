@@ -37,6 +37,46 @@ object Calibration {
     val tempIn    = file("/data/projects/Koerper/audio_work/us-180512-approach-continuous-motu-%d.aif")
     val fCalib    = file("/data/temp/test-calib.aif")
     val specCalb  = AudioFile.readSpec(fCalib)
+    //    require (specIn.sampleRate == sr)
+    require (specCalb.numFrames == numBands)
+    val tempOut   = file("/data/temp/us-test-remove-%d.png")
+
+    val g = Graph {
+      import graph._
+      for (ch <- 1 to 5) {
+        val fIn       = formatTemplate(tempIn , ch)
+        val fOut      = formatTemplate(tempOut, ch)
+        val specIn    = AudioFile.readSpec(fIn)
+        val numWin    = calcNumWin(specIn.numFrames, config)
+        val in        = AudioFileIn(file = fIn    , numChannels = 1) * gainIn
+        val calib     = AudioFileIn(file = fCalib , numChannels = 1)
+        val calibR    = RepeatWindow(calib, size = numBands, num = numWin)
+        val constQ    = analyze(in, config)
+        val norm      = constQ.sqrt // / dbMax.dbAmp
+        val min       = norm min calibR
+        val thresh    = norm - min
+        val rot       = RotateFlipMatrix(thresh, rows = numWin, columns = numBands, mode = RotateFlipMatrix.Rot90CCW)
+        RunningMin(rot).last.poll(0, "min")
+        RunningMax(rot).last.poll(0, "max")
+        val max       = rot.ampDb.linLin(dbMin, dbMax, 0.0, 1.0).clip()
+        val specOut   = ImageFile.Spec(width = numWin, height = numBands, numChannels = 1)
+        ImageFileOut(file = fOut, spec = specOut, in = max)
+      }
+    }
+
+    val ctrl = Control()
+    ctrl.run(g)
+    import ctrl.config.executionContext
+    ctrl.status.foreach { _ =>
+      sys.exit()
+    }
+  }
+
+  def testApplyQ(config: Config): Unit = {
+    import config._
+    val tempIn    = file("/data/projects/Koerper/audio_work/us-180512-approach-continuous-motu-%d.aif")
+    val fCalib    = file("/data/temp/test-calib.aif")
+    val specCalb  = AudioFile.readSpec(fCalib)
 //    require (specIn.sampleRate == sr)
     require (specCalb.numFrames == numBands)
     val tempOut   = file("/data/temp/test-removeQ-%d.png")
