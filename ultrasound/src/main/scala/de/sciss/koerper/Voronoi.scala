@@ -4,6 +4,7 @@ import java.awt.Color
 import java.awt.image.BufferedImage
 
 import de.sciss.file._
+import de.sciss.intensitypalette.IntensityPalette
 import de.sciss.kollflitz
 import de.sciss.kollflitz.Vec
 import de.sciss.numbers.Implicits._
@@ -394,30 +395,33 @@ object Voronoi {
   }
 
   def testRenderImage(): Unit = {
-    val extent    = 512
-    val lightRef  = Pt3(-0.7, -0.7, 1).normalized
+    val extent    = 1080
     val imgIn     = Array.tabulate(5)(ch => ImageIO.read(file(s"/data/projects/Koerper/material/us-test-remove-${ch+1}.png")))
     val imgOut    = new BufferedImage(extent, extent, BufferedImage.TYPE_INT_ARGB)
+    val dirOut    = file("/data/temp/multi-face/")
+    dirOut.mkdirs()
+    require(dirOut.isDirectory)
 
-    (0 until 120).zipWithIndex.foreach { case (rot, ri) =>
-      for (xi <- 0 until extent) {
-        for (yi <- 0 until extent) {
-          val x = xi.linLin(0, extent, -1.0, 1.0)
-          val y = yi.linLin(0, extent, -1.0, 1.0)
-          val d = hypot(x, y)
-          if (d > 1.0) {
-            imgOut.setRGB(xi, yi, 0xFF000000)
-          } else {
-            val z   = sqrt(1 - d)
-            val v0  = Pt3(x, y, z).normalized
-            val q   = {
-              val v1 = v0.rotateX(rot * 6.toRadians)
-              v1.rotateY(rot * 3.0.toRadians)
-            }
-            val tc    = voronoiCentersPt3.minBy(_.centralAngle(q))
-            val vIdx  = voronoiCentersPt3.indexOf(tc)
-            val col = {
-              if (true || vIdx == 1) {
+    (0 until 1000).zipWithIndex.foreach { case (rot, ri) =>
+      val fOut = dirOut/f"testH-rot-${ri+1}%03d.png"
+      if (fOut.length() == 0L) {
+        for (xi <- 0 until extent) {
+          for (yi <- 0 until extent) {
+            val x = xi.linLin(0, extent, -1.0, 1.0)
+            val y = yi.linLin(0, extent, -1.0, 1.0)
+            val d = hypot(x, y)
+            if (d > 1.0) {
+              imgOut.setRGB(xi, yi, 0xFF000000)
+            } else {
+              val z   = sqrt(1 - d)
+              val v0  = Pt3(x, y, z).normalized
+              val q   = {
+                val v1 = v0.rotateX(rot * 0.23 /* 6 */.toRadians)
+                v1.rotateY(rot * 0.11 /* 3.0 */.toRadians)
+              }
+              val tc    = voronoiCentersPt3.minBy(_.centralAngle(q))
+              val vIdx  = voronoiCentersPt3.indexOf(tc)
+              val col = {
                 var bestExt     = Double.PositiveInfinity
                 var bestPos1    = 0.0
                 var bestPos2    = 0.0
@@ -436,7 +440,7 @@ object Voronoi {
                   val d3        = B.centralAngle(D)
                   if (ext < bestExt) {
                     bestExt       = ext
-//                    bestPos1      = q.centralAngle(tc) / ext
+                    //                    bestPos1      = q.centralAngle(tc) / ext
                     bestPos1      = H.centralAngle(q) / ext
                     val d1        = B.centralAngle(H)
                     bestPos2      = polyAccum + d1
@@ -448,29 +452,18 @@ object Voronoi {
                 val i  = imgIn(vIdx)
                 val iy = (bestPos1 * i.getHeight).toInt.clip(0, i.getHeight - 1)
                 val ix = (bestPos2 * i.getWidth ).toInt.clip(0, i.getWidth - 1)
-                i.getRGB(ix, iy)
+                val rgb = i.getRGB(ix, iy)
+                val l   = (rgb & 0xFF) / 255f
+                IntensityPalette.apply(l)
 
-              } else {
-                val hue = vIdx.linLin(0, voronoiCentersPt3.size, 0f, 1f)
-                Color.getHSBColor(hue, 1f, 1f).getRGB
               }
+              imgOut.setRGB(xi, yi, 0xFF000000 | col)
             }
-            val r   = ((col >> 16) & 0xFF) / 255f
-            val g   = ((col >>  8) & 0xFF) / 255f
-            val b   = ((col >>  0) & 0xFF) / 255f
-            val l   = (v0.dot(lightRef) + 1.0) / 2.0
-            val rl  = r * l
-            val gl  = g * l
-            val bl  = b * l
-            val rc  = (rl * 255).toInt.clip(0, 255) << 16
-            val gc  = (gl * 255).toInt.clip(0, 255) <<  8
-            val bc  = (bl * 255).toInt.clip(0, 255) <<  0
-            imgOut.setRGB(xi, yi, 0xFF000000 | rc | gc | bc)
           }
         }
-      }
 
-      ImageIO.write(imgOut, "png", file(f"/data/temp/foo/test-rot-${ri+1}%03d.png"))
+        ImageIO.write(imgOut, "png", fOut)
+      }
     }
   }
 }
