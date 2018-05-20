@@ -330,9 +330,12 @@ object Voronoi {
     val v         = n cross B
     val H0        = -(N dot v) * B + (N dot B) * v
     val H         = H0.normalized
-    val pos       = 1.0 - (H.centralAngle(testPt) / H.centralAngle(c0))
+    val pos1      = testPt.centralAngle(c0) / H.centralAngle(c0)
+    val d1        = B.centralAngle(H)
+    val d3        = B.centralAngle(D)
+    val pos2      = d1 / d3
     println(s"B = $B, D = $D, c0 = $c0, testPt = $testPt, H = $H")
-    println(f"pos = $pos%g")
+    println(f"pos1 = $pos1%g, pos2 = $pos2%g")
 
     (0 to 0).zipWithIndex.foreach { case (rot, ri) =>
       for (xi <- 0 until extent) {
