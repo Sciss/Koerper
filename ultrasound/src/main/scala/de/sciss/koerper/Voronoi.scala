@@ -21,7 +21,6 @@ import de.sciss.intensitypalette.IntensityPalette
 import de.sciss.koerper.Geom._
 import de.sciss.kollflitz
 import de.sciss.kollflitz.Vec
-import de.sciss.numbers.DoubleFunctions
 import de.sciss.numbers.Implicits._
 import javax.imageio.ImageIO
 
@@ -195,12 +194,12 @@ object Voronoi {
           for (yi <- 0 until extent) {
             val x = xi.linLin(0, extent, -1.0, 1.0)
             val y = yi.linLin(0, extent, -1.0, 1.0)
-            val d = Raster.fastHypot(x, y) // hypot(x, y)
+            val d = x*x + y*y // Raster.fastHypot(x, y) // hypot(x, y)
             if (d > 1.0) {
               imgOut.setRGB(xi, yi, 0xFF000000)
             } else {
               val z   = sqrt(1 - d)
-              val v0  = Pt3(x, y, z).normalized
+              val v0  = Pt3(x, y, z) // .normalized
               val q   = {
                 val v1 = v0.rotateX(rot * 0.23 /* 6 */.toRadians)
                 v1.rotateY(rot * 0.11 /* 3.0 */.toRadians)
@@ -235,12 +234,25 @@ object Voronoi {
                 }
                 bestPos2 /= polyAccum
                 // if (bestPos1 > 1.001) println(s"Ooops $bestPos1")
-                val i  = imgIn(vIdx)
-                val iy = (bestPos1 * i.getHeight).toInt.clip(0, i.getHeight - 1)
-                val ix = (bestPos2 * i.getWidth ).toInt.clip(0, i.getWidth  - 1)
-                val rgb = i.getRGB(ix, iy)
-                val l   = (rgb & 0xFF) / 255f
-                IntensityPalette.apply(l)
+                val i     = imgIn(vIdx)
+                val fy    = bestPos1 * i.getHeight
+                val fx    = bestPos2 * i.getWidth
+                val iy    = fy.toInt
+                val ix    = fx.toInt
+                val wy2   = fy % 1.0
+                val wy1   = 1.0 - wy2
+                val wx2   = fx % 1.0
+                val wx1   = 1.0 - wx2
+                val iy1   = iy      .clip(0, i.getHeight - 1)
+                val ix1   = ix      .clip(0, i.getWidth  - 1)
+                val iy2   = (iy + 1).clip(0, i.getHeight - 1)
+                val ix2   = (ix + 1).clip(0, i.getWidth  - 1)
+                val rgb1  = (i.getRGB(ix1, iy1) & 0xFF) / 255.0
+                val rgb2  = (i.getRGB(ix2, iy1) & 0xFF) / 255.0
+                val rgb3  = (i.getRGB(ix1, iy2) & 0xFF) / 255.0
+                val rgb4  = (i.getRGB(ix2, iy2) & 0xFF) / 255.0
+                val l     = rgb1 * (wx1 * wy1) + rgb2 * (wx2 * wy1) + rgb3 * (wx1 * wy2) + rgb4 * (wx2 * wy2)
+                IntensityPalette.apply(l.toFloat)
 
               }
               imgOut.setRGB(xi, yi, 0xFF000000 | col)
