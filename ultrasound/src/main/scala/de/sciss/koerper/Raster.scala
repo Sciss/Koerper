@@ -27,7 +27,7 @@ import scala.math._
 
 object Raster {
   def CoordFile(ch: Int): File = {
-    require (ch >= 0 && ch < 5)
+    require (ch >= 0 && ch < Koerper.numChannels)
     Koerper.auxDir / s"voronoi_coord-${ch+1}.aif"
   }
 
@@ -81,11 +81,12 @@ object Raster {
 
   def createCoordinateFiles(): Unit = {
     val all = fibonacciSphere(RasterSize)
-    for (vi <- 0 until 5) {
+    for (vi <- 0 until Koerper.numChannels) {
       val tc          = voronoiCentersPt3(vi)
       val polyIndices = voronoiPolygons(vi)
 
       val fOut  = CoordFile(vi)
+      // sr is arbitrary
       val afOut = AudioFile.openWrite(fOut, AudioFileSpec(numChannels = 2, sampleRate = 96000.0))
       val afBuf = afOut.buffer(8192)
       var off   = 0
@@ -111,7 +112,7 @@ object Raster {
           var vj = 0
           var bestDist = Double.MaxValue
           var bestIdx = 0
-          while (vj < 5) {
+          while (vj < Koerper.numChannels) {
             val q = tca(vj)
             val dist = q.centralAngle(p)
             if (bestDist > dist) {
@@ -185,13 +186,13 @@ object Raster {
 
     val g = Graph {
       import graph._
-      for (ch <- 0 until 1) {
+      for (ch <- 0 until Koerper.numChannels) {
         val fIn       = formatTemplate(tempIn , ch + 1)
         val fOut      = formatTemplate(tempOut, ch + 1)
         val specIn    = AudioFile.readSpec(fIn)
         val numWin0   = calcNumWin(specIn.numFrames, config)
         val numWin    = math.min(numWin0, 8192)
-        println(s"[${ch + 1}] numWin = $numWin; numWin0 = $numWin0, numBands = $numBands; winStep = ${calcWinStep(config)}")
+//        println(s"[${ch + 1}] numWin = $numWin; numWin0 = $numWin0, numBands = $numBands; winStep = ${calcWinStep(config)}")
         val in        = AudioFileIn(file = fIn    , numChannels = 1) * gainIn
         val calib     = AudioFileIn(file = fCalib , numChannels = 1)
         val calibR    = RepeatWindow(calib, size = numBands, num = numWin)
@@ -205,12 +206,13 @@ object Raster {
         val max       = rot.ampDb.linLin(dbMin, dbMax, 0.0, 1.0).clip()
         val fCoord    = CoordFile(ch)
         val coord     = AudioFileIn(fCoord, numChannels = 2)
-        val posH      = coord.out(0)
-        val posV      = coord.out(1)
-        posH.poll(label = "posH")
-        posV.poll(label = "posV")
+        val posH      = coord.out(0) * numWin
+        val posV      = coord.out(1) * numBands
+//        posH.poll(label = "posH")
+//        posV.poll(label = "posV")
         val scanned   = ScanImage(max, width = numBands, height = numWin, x = posV, y = posH, zeroCrossings = 0)
-        AudioFileOut(fOut, AudioFileSpec(numChannels = 1, sampleRate = 96000.0), in = scanned)
+        // sr is arbitrary
+        AudioFileOut(fOut, AudioFileSpec(numChannels = 1, sampleRate = 44100.0), in = scanned)
       }
     }
 
@@ -228,7 +230,7 @@ object Raster {
     println(f"distinct are $numDist or ${numDist * 100.0 / RasterSize}%g%%")
     val tca = voronoiCentersPt3.toArray
     var vi = 0
-    while (vi < 5) {
+    while (vi < Koerper.numChannels) {
       var ai = 0
       var count = 0
       while (ai < arr.length) {
@@ -236,7 +238,7 @@ object Raster {
         var vj = 0
         var bestDist = Double.MaxValue
         var bestIdx  = 0
-        while (vj < 5) {
+        while (vj < Koerper.numChannels) {
           val q = tca(vj)
           val dist = q.centralAngle(p)
           if (bestDist > dist) {

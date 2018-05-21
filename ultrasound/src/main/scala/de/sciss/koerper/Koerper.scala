@@ -16,6 +16,8 @@ package de.sciss.koerper
 import de.sciss.file._
 
 object Koerper {
+  final val numChannels = 5
+
   val baseDir: File = {
     val tmp = file("/data") / "projects" / "Koerper"
     if (tmp.isDirectory) tmp else userHome / "Documents" / "projects" / "Koerper"
