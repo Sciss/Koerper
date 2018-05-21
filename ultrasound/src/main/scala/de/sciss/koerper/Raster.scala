@@ -13,22 +13,36 @@
 
 package de.sciss.koerper
 
+import java.awt.geom.Ellipse2D
+import java.awt.{Color, RenderingHints}
+import java.awt.image.BufferedImage
+import java.util
+
 import de.sciss.file._
-import de.sciss.fscape.{Graph, graph}
 import de.sciss.fscape.stream.Control
+import de.sciss.fscape.{Graph, graph}
 import de.sciss.koerper.Calibration.formatTemplate
-import de.sciss.koerper.DopplerTest.{Config, analyze, calcNumWin, calcWinStep}
+import de.sciss.koerper.DopplerTest.{Config, analyze, calcNumWin}
 import de.sciss.koerper.Geom._
 import de.sciss.koerper.Voronoi.{ScalarOps, voronoiCentersPt3, voronoiCornersPt3, voronoiPolygons}
 import de.sciss.kollflitz
+import de.sciss.numbers
 import de.sciss.synth.io.{AudioFile, AudioFileSpec}
+import javax.imageio.ImageIO
 
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 import scala.math._
 
 object Raster {
-  def CoordFile(ch: Int): File = {
+  def VoronoiCoordFile(ch: Int): File = {
     require (ch >= 0 && ch < Koerper.numChannels)
     Koerper.auxDir / s"voronoi_coord-${ch+1}.aif"
+  }
+
+  def SphereCoordFile(ch: Int): File = {
+    require (ch >= 0 && ch < Koerper.numChannels)
+    Koerper.auxDir / s"sphere_coord-${ch+1}.aif"
   }
 
 //  private final val CoordCookie = 0x436F6F72  // "Coor"
@@ -45,8 +59,74 @@ object Raster {
 
    */
 
-  def init(): Unit = {
+  def testRenderStochasticImage(): Unit = {
+    val tableCoord = mkSphereCoordinatesTable()
 
+//    {
+//      var ti = 0
+//      var xL = 0
+//      var xR = 0
+//      var yT = 0
+//      var yB = 0
+//      var zF = 0
+//      var zB = 0
+//
+//      while (ti < tableCoord.length) {
+//        val theta = tableCoord(ti); ti += 1
+//        val phi   = tableCoord(ti); ti += 1
+//        val xyz   = Polar(theta, phi).toCartesian
+//        if (xyz.x < 0) xL += 1 else if (xyz.x > 0) xR += 1
+//        if (xyz.y < 0) yT += 1 else if (xyz.y > 0) yB += 1
+//        if (xyz.z < 0) zF += 1 else if (xyz.z > 0) zB += 1
+//      }
+//      println(s"x = $xL/$xR, y = $yT/$yB, z = $zF/$zB")
+//    }
+
+    val tableData   = mkStochasticTable()
+    val N           = RasterSize / 15; // sqrt(RasterSize).toInt
+
+    val extent    = 1080
+    val oval      = new Ellipse2D.Float
+    val tempOut   = file("/data/temp/stoch-test/test-render-stoch-%03d.png")
+
+    (0 until 1000).zipWithIndex.foreach { case (rot, ri) =>
+      val fOut = formatTemplate(tempOut, ri + 1)
+      if (!fOut.exists()) {
+        val img       = new BufferedImage(extent, extent, BufferedImage.TYPE_INT_ARGB)
+        val g         = img.createGraphics()
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING  , RenderingHints.VALUE_ANTIALIAS_ON )
+        g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE  )
+        g.setColor(Color.black)
+        g.fillRect(0, 0, extent, extent)
+        g.setColor(Color.white)
+        //    var count     = 0
+        //    println(s"LAST ${tableData.last}")
+        for (_ <- 0 until N) {
+          val i0    = util.Arrays.binarySearch(tableData, random().toFloat)
+          val i1    = if (i0 >= 0) i0 else -(i0 - 1)
+          val dot   = if (i1 < tableData.length) i1 else tableData.length - 1
+          val dotL  = dot << 1
+          val theta = tableCoord(dotL)
+          val phi   = tableCoord(dotL + 1)
+          val v0    = Polar(theta, phi).toCartesian
+          val v = {
+            val v1 = v0.rotateX(rot * 0.23.toRadians)
+            v1.rotateY(rot * 0.11.toRadians)
+          }
+          if (v.z < 0) {
+            import numbers.Implicits._
+            val x = v.x.linLin(-1, 1, 0, extent)
+            val y = v.y.linLin(-1, 1, 0, extent)
+            oval.setFrame(x - 1.0, y - 1.0, 2.0, 2.0)
+            g.fill(oval)
+            //        count += 1
+          }
+        }
+        g.dispose()
+        ImageIO.write(img, "png", fOut)
+        //    println(f"Hits $count of $N (or ${count * 100.0 / N}%g%%)")
+      }
+    }
   }
 
   def fibonacciSphere(num: Int, step: Double = 1.0): Array[Pt3] = {
@@ -70,36 +150,119 @@ object Raster {
 
   def main(args: Array[String]): Unit = {
     val config = Config()
-    if (!CoordFile(0).exists) {
+    if (!VoronoiCoordFile(0).exists) {
       println("Creating coordinate files...")
       createCoordinateFiles()
       println("Done.")
     }
-    println("Testing application and Voronoi mapping...")
-    testApplyAndMapVoronoi(config)
+    val tempApp = file("/data/temp/test-removeMap-%d.aif")
+    if (!formatTemplate(tempApp, 1).exists()) {
+      println("Testing application and Voronoi mapping...")
+      testApplyAndMapVoronoi(config)
+      println("Done.")
+    }
+
+    testRenderStochasticImage()
+  }
+
+  def mkSphereCoordinatesTable(): Array[Float] = {
+    val buf = new Array[Float](RasterSize << 1)
+    var off = 0
+    var ch = 0
+    while (ch < Koerper.numChannels) {
+      val n = readSphereCoordinateFile(buf, off = off, ch = ch)
+      off += n
+      ch += 1
+    }
+    buf
+  }
+
+  def mkStochasticTable(): Array[Float] = {
+    val buf     = new Array[Float](RasterSize)
+    val tempIn  = file("/data/temp/test-removeMap-%d.aif")
+    val bufW    = new Array[Array[Float]](1)
+    bufW(0)     = buf
+    var off     = 0
+    var sum     = 0.0
+    var ch = 0
+    while (ch < Koerper.numChannels) {
+      val afIn  = AudioFile.openRead(formatTemplate(tempIn, ch + 1))
+      val n     = afIn.numFrames.toInt
+      afIn.read(bufW, off, n)
+      val stop  = off + n
+      while (off < stop) {
+        val value = buf(off)
+        sum += value
+        buf(off) = sum.toFloat
+        off += 1
+      }
+      ch += 1
+    }
+    val gain = (1.0 / buf(buf.length - 1)).toFloat
+    off = 0
+    while (off < buf.length) {
+      buf(off) *= gain
+      off += 1
+    }
+    buf
+  }
+
+  def readSphereCoordinateFile(buf: Array[Float], off: Int, ch: Int): Int = {
+    val fIn = SphereCoordFile(ch)
+    val af  = AudioFile.openRead(fIn)
+    try {
+      val afBuf = af.buffer(8192)
+      val bh    = afBuf(0)
+      val bv    = afBuf(1)
+      val n     = af.numFrames.toInt
+      var off1  = off
+      val stop  = off + n
+      while (off1 < stop) {
+        val chunk = math.min(8192, stop - off1)
+        af.read(afBuf)
+        var i = 0
+        while (i < chunk) {
+          val theta = bh(i)
+          val phi   = bv(i)
+          buf(off1) = theta ; off1 += 1
+          buf(off1) = phi   ; off1 += 1
+          i += 1
+        }
+      }
+      n
+
+    } finally {
+      af.close()
+    }
   }
 
   def createCoordinateFiles(): Unit = {
     val all = fibonacciSphere(RasterSize)
-    for (vi <- 0 until Koerper.numChannels) {
+    for (vi <- 4 until Koerper.numChannels) {
       val tc          = voronoiCentersPt3(vi)
       val polyIndices = voronoiPolygons(vi)
 
-      val fOut  = CoordFile(vi)
+      val fVOut   = VoronoiCoordFile(vi)
+      val fSpOut  = SphereCoordFile (vi)
       // sr is arbitrary
-      val afOut = AudioFile.openWrite(fOut, AudioFileSpec(numChannels = 2, sampleRate = 96000.0))
-      val afBuf = afOut.buffer(8192)
-      var off   = 0
+      val afVOut    = AudioFile.openWrite(fVOut , AudioFileSpec(numChannels = 2, sampleRate = 96000.0))
+      val afSphOut  = AudioFile.openWrite(fSpOut, AudioFileSpec(numChannels = 2, sampleRate = 96000.0))
+      val afVBuf    = afVOut  .buffer(8192)
+      val afSphBuf  = afSphOut.buffer(8192)
+      var off       = 0
 
       def flush(): Unit =
         if (off > 0) {
-          afOut.write(afBuf, 0, off)
+          afVOut  .write(afVBuf   , 0, off)
+          afSphOut.write(afSphBuf , 0, off)
           off = 0
         }
 
-      def put(posH: Double, posV: Double): Unit = {
-        afBuf(0)(off) = posH.toFloat
-        afBuf(1)(off) = posV.toFloat
+      def put(posH: Double, posV: Double, theta: Double, phi: Double): Unit = {
+        afVBuf  (0)(off) = posH .toFloat
+        afVBuf  (1)(off) = posV .toFloat
+        afSphBuf(0)(off) = theta.toFloat
+        afSphBuf(1)(off) = phi  .toFloat
         off += 1
         if (off == 8192) flush()
       }
@@ -162,7 +325,10 @@ object Raster {
               println(s"Failed to get position. vi = $vi, ai = $ai")
             }
             bestPosH /= polyAccum
-            put(bestPosH, bestPosV)
+//            val r  = p
+            val pp = p.toPolar
+//            val q  = pp.toCartesian
+            put(posH = bestPosH, posV = bestPosV, theta = pp.theta, phi = pp.phi)
           }
           ai += 1
         }
@@ -170,7 +336,8 @@ object Raster {
         flush()
 
       } finally {
-        afOut.close()
+        afVOut  .close()
+        afSphOut.close()
       }
     }
   }
@@ -204,7 +371,7 @@ object Raster {
 //        RunningMin(rot).last.poll(0, "min")
 //        RunningMax(rot).last.poll(0, "max")
         val max       = rot.ampDb.linLin(dbMin, dbMax, 0.0, 1.0).clip()
-        val fCoord    = CoordFile(ch)
+        val fCoord    = VoronoiCoordFile(ch)
         val coord     = AudioFileIn(fCoord, numChannels = 2)
         val posH      = coord.out(0) * numWin
         val posV      = coord.out(1) * numBands
@@ -218,10 +385,11 @@ object Raster {
 
     val ctrl = Control()
     ctrl.run(g)
-    import ctrl.config.executionContext
-    ctrl.status.foreach { _ =>
-      sys.exit()
-    }
+//    import ctrl.config.executionContext
+    Await.result(ctrl.status, Duration.Inf)
+//    ctrl.status.foreach { _ =>
+//      sys.exit()
+//    }
   }
 
   def testFibo(): Unit = {
