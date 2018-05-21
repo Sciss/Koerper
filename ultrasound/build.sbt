@@ -17,6 +17,7 @@ libraryDependencies ++= Seq(
   "de.sciss"          %% "scalaosc"         % deps.main.scalaOSC,
   "de.sciss"          %% "swingplus"        % deps.main.swingPlus,
   "de.sciss"          %  "intensitypalette" % deps.main.intensityPalette,
+  "de.sciss"          %  "kdtree"           % deps.main.kdTree,
   "com.github.scopt"  %% "scopt"            % deps.main.scopt
 )
 
@@ -25,6 +26,7 @@ lazy val deps = new {
     val fileUtil          = "1.1.3"
     val fscape            = "2.15.1"
     val intensityPalette  = "1.0.0"
+    val kdTree            = "0.1.0"
     val kollflitz         = "0.2.2"
     val neuralGas         = "2.3.1"
     val numbers           = "0.1.5"
