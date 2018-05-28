@@ -245,5 +245,34 @@ object Geom {
 
     //    def centralAngle(that: Polar): Double =
     //      acos(this.theta.sin * that.theta.sin + this.theta.cos * that.theta.cos * (this.phi absDif that.phi).cos)
+
+    def interpolate(that: LatLon, f: Double): LatLon = {
+      import Math._
+      // http://edwilliams.org/avform.htm
+      val d       = this centralAngle that
+      val lat1    = this.lat
+      val lon1    = this.lon
+      val lat2    = that.lat
+      val lon2    = that.lon
+
+      val sinD    = sin(d)
+      val a       = sin((1 - f) * d) / sinD
+      val b       = sin( f      * d) / sinD
+      val cosLat1 = cos(lat1)
+      val cosLon1 = cos(lon1)
+      val cosLat2 = cos(lat2)
+      val cosLon2 = cos(lon2)
+      val sinLat1 = sin(lat1)
+      val sinLon1 = sin(lon1)
+      val sinLat2 = sin(lat2)
+      val sinLon2 = sin(lon2)
+      val x       = a * cosLat1 * cosLon1 + b * cosLat2 * cosLon2
+      val y       = a * cosLat1 * sinLon1 + b * cosLat2 * sinLon2
+      val z       = a * sinLat1           + b * sinLat2
+      val lat     = atan2(z, sqrt(x * x + y * y))
+      val lon     = atan2(y, x)
+
+      LatLon(lat, lon)
+    }
   }
 }
