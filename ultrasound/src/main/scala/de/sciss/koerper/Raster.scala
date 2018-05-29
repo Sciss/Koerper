@@ -71,7 +71,7 @@ object Raster {
     val totalCoordNum = tableCoords.map(_.length/2).sum
     assert(totalCoordNum == RasterSize)
 
-    val all = fibonacciSphere(RasterSize)
+//    val all = fibonacciSphere(RasterSize)
 
     (0 until 100).zipWithIndex.foreach { case (rot, ri) =>
       val fOut = formatTemplate(tempOut, ri + 1)
@@ -89,13 +89,12 @@ object Raster {
           import numbers.Implicits._
           g.setColor(Color.getHSBColor(ch.linLin(0, Koerper.numChannels, 0.0f, 1.0f), 1f, 1f))
           for (_ <- 0 until 10000) {
-//            val dotL = rnd.nextInt(tableCoord.length) & ~1
-////            val dotL  = dot << 1
-//            val theta = tableCoord(dotL)
-//            val phi   = tableCoord(dotL + 1)
-//            val v0    = Polar(theta, phi).toCartesian
+            val dotL = rnd.nextInt(tableCoord.length) & ~1
+            val theta = tableCoord(dotL)
+            val phi   = tableCoord(dotL + 1)
+            val v0    = Polar(theta, phi).toCartesian
 
-            val v0 = all(rnd.nextInt(all.length))
+//            val v0 = all(rnd.nextInt(all.length))
 
             val v = {
               val v1 = v0.rotateX(rot * 6.0.toRadians)
@@ -285,10 +284,10 @@ object Raster {
       val bv    = afBuf(1)
       val n     = af.numFrames.toInt
       var off1  = off
-      val stop  = off + n
-      while (off1 < stop) {
-        val chunk = math.min(8192, stop - off1)
-        af.read(afBuf)
+      var rem   = n
+      while (rem > 0) {
+        val chunk = math.min(8192, rem)
+        af.read(afBuf, 0, chunk)
         var i = 0
         while (i < chunk) {
           val theta = bh(i)
@@ -297,6 +296,7 @@ object Raster {
           buf(off1) = phi   ; off1 += 1
           i += 1
         }
+        rem -= chunk
       }
       n
 
@@ -307,18 +307,18 @@ object Raster {
 
   def createCoordinateFiles(): Unit = {
     val all = fibonacciSphere(RasterSize)
-    for (vi <- 4 until Koerper.numChannels) {
-      val tc          = voronoiCentersPt3(vi)
-      val polyIndices = voronoiPolygons(vi)
+    for (vi <- 0 until Koerper.numChannels) {
+      val tc          = voronoiCentersPt3 (vi)
+      val polyIndices = voronoiPolygons   (vi)
 
-      val fVOut   = VoronoiCoordFile(vi)
-      val fSpOut  = SphereCoordFile (vi)
+      val fVOut       = VoronoiCoordFile  (vi)
+      val fSpOut      = SphereCoordFile   (vi)
       // sr is arbitrary
-      val afVOut    = AudioFile.openWrite(fVOut , AudioFileSpec(numChannels = 2, sampleRate = 96000.0))
-      val afSphOut  = AudioFile.openWrite(fSpOut, AudioFileSpec(numChannels = 2, sampleRate = 96000.0))
-      val afVBuf    = afVOut  .buffer(8192)
-      val afSphBuf  = afSphOut.buffer(8192)
-      var off       = 0
+      val afVOut      = AudioFile.openWrite(fVOut , AudioFileSpec(numChannels = 2, sampleRate = 96000.0))
+      val afSphOut    = AudioFile.openWrite(fSpOut, AudioFileSpec(numChannels = 2, sampleRate = 96000.0))
+      val afVBuf      = afVOut  .buffer(8192)
+      val afSphBuf    = afSphOut.buffer(8192)
+      var off         = 0
 
       def flush(): Unit =
         if (off > 0) {
@@ -328,6 +328,8 @@ object Raster {
         }
 
       def put(posH: Double, posV: Double, theta: Double, phi: Double): Unit = {
+        require (!(theta == 0.0 && phi == 0.0))
+
         afVBuf  (0)(off) = posH .toFloat
         afVBuf  (1)(off) = posV .toFloat
         afSphBuf(0)(off) = theta.toFloat
@@ -343,7 +345,7 @@ object Raster {
           val p = all(ai)
           var vj = 0
           var bestDist = Double.MaxValue
-          var bestIdx = 0
+          var bestIdx = -1
           while (vj < Koerper.numChannels) {
             val q = tca(vj)
             val dist = q.centralAngle(p)
@@ -353,6 +355,7 @@ object Raster {
             }
             vj += 1
           }
+          require (bestIdx >= 0)
           if (bestIdx == vi) {
             var bestExt     = Double.PositiveInfinity
             var bestPosV    = 0.0
