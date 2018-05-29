@@ -233,7 +233,7 @@ object Raster {
         //    var count     = 0
         //    println(s"LAST ${tableData.last}")
         for (_ <- 0 until N) {
-          val i0    = util.Arrays.binarySearch(tableData, random().toFloat)
+          val i0    = util.Arrays.binarySearch(tableData, random())
           val i1    = if (i0 >= 0) i0 else -(i0 - 1)
           val dot   = if (i1 < tableData.length) i1 else tableData.length - 1
           val dotL  = dot << 1
@@ -293,9 +293,9 @@ object Raster {
       println("Done.")
     }
 
-//    testRenderStochasticImage()
+    testRenderStochasticImage()
 //    testRenderVoronoiImage()
-    testRenderVoronoiImage2()
+//    testRenderVoronoiImage2()
   }
 
   def mkSphereCoordinatesTable(): Array[Float] = {
@@ -310,11 +310,12 @@ object Raster {
     buf
   }
 
-  def mkStochasticTable(): Array[Float] = {
-    val buf     = new Array[Float](RasterSize)
+  def mkStochasticTable(): Array[Double] = {
+    val bufOut  = new Array[Double](RasterSize)
     val tempIn  = file("/data/temp/test-removeMap-%d.aif")
     val bufW    = new Array[Array[Float]](1)
-    bufW(0)     = buf
+    val bufIn   = new Array[Float](8192)
+    bufW(0)     = bufIn
     var off     = 0
     var sum     = 0.0
     var ch = 0
@@ -322,24 +323,30 @@ object Raster {
       val fIn   = formatTemplate(tempIn, ch + 1)
       val afIn  = AudioFile.openRead(fIn)
       val n     = afIn.numFrames.toInt
-      afIn.read(bufW, off, n)
-      val stop  = off + n
-      while (off < stop) {
-        val value = buf(off)
-        sum += value
-        buf(off) = sum.toFloat
-        off += 1
+      var rem   = n
+      while (rem > 0) {
+        val chunk = math.min(8192, rem)
+        afIn.read(bufW, 0, chunk)
+        var i = 0
+        while (i < chunk) {
+          val value = bufIn(i)
+          sum += value
+          bufOut(off) = sum
+          off += 1
+          i += 1
+        }
+        rem -= chunk
       }
       ch += 1
     }
     require (off == RasterSize)
-    val gain = (1.0 / buf(buf.length - 1)).toFloat
+    val gain = 1.0 / sum
     off = 0
-    while (off < buf.length) {
-      buf(off) *= gain
+    while (off < bufOut.length) {
+      bufOut(off) *= gain
       off += 1
     }
-    buf
+    bufOut
   }
 
   def readSphereCoordinateFile(ch: Int): Array[Float] = {
