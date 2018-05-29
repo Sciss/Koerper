@@ -59,6 +59,79 @@ object Raster {
 
    */
 
+  def testRenderVoronoiImage2(): Unit = {
+    val extent      = 1080
+    val oval        = new Ellipse2D.Float
+    val tempOut     = file("/data/temp/stoch-test/test-render-voronoi-%03d.png")
+
+    val tableCoords = for (ch <- 0 until Koerper.numChannels) yield {
+      readSphereCoordinateFile(ch)
+    }
+    val tablePixels = for (ch <- 0 until Koerper.numChannels) yield {
+      val tempApp = file("/data/temp/test-removeMap-%d.aif")
+      val fIn = formatTemplate(tempApp, ch + 1)
+      val afIn = AudioFile.openRead(fIn)
+      try {
+        val buf = afIn.buffer(afIn.numFrames.toInt)
+        afIn.read(buf)
+        buf(0)
+      } finally {
+        afIn.close()
+      }
+    }
+
+    val totalCoordNum = tableCoords.map(_.length/2).sum
+    assert(totalCoordNum == RasterSize)
+
+    //    val all = fibonacciSphere(RasterSize)
+
+    (0 until 100).zipWithIndex.foreach { case (rot, ri) =>
+      val fOut = formatTemplate(tempOut, ri + 1)
+      if (!fOut.exists()) {
+        val img       = new BufferedImage(extent, extent, BufferedImage.TYPE_INT_ARGB)
+        val g         = img.createGraphics()
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING  , RenderingHints.VALUE_ANTIALIAS_ON )
+        g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE  )
+        g.setColor(Color.black)
+        g.fillRect(0, 0, extent, extent)
+
+        val rnd = new util.Random(0L)
+        for (ch <- 0 until Koerper.numChannels) {
+          val tableCoord = tableCoords(ch)
+          val tablePixel = tablePixels(ch)
+          import numbers.Implicits._
+          for (_ <- 0 until 40000) {
+            val dot   = rnd.nextInt(tableCoord.length/2)
+            val dotL  = dot << 1
+            val theta = tableCoord(dotL)
+            val phi   = tableCoord(dotL + 1)
+            val v0    = Polar(theta, phi).toCartesian
+
+            //            val v0 = all(rnd.nextInt(all.length))
+
+            val v = {
+              val v1 = v0.rotateX(rot * 6.0.toRadians)
+              v1.rotateY(rot * 3.0.toRadians)
+            }
+            if (v.z < 0) {
+              val bri = tablePixel(dot)
+              g.setColor(Color.getHSBColor(ch.linLin(0, Koerper.numChannels, 0.0f, 1.0f), 1f - bri, bri))
+              //              import numbers.Implicits._
+              val x = v.x.linLin(-1, 1, 0, extent)
+              val y = v.y.linLin(-1, 1, 0, extent)
+              oval.setFrame(x - 1.0, y - 1.0, 2.0, 2.0)
+              g.fill(oval)
+              //        count += 1
+            }
+          }
+        }
+        g.dispose()
+        ImageIO.write(img, "png", fOut)
+        //    println(f"Hits $count of $N (or ${count * 100.0 / N}%g%%)")
+      }
+    }
+  }
+
   def testRenderVoronoiImage(): Unit = {
     val extent      = 1080
     val oval        = new Ellipse2D.Float
@@ -220,8 +293,9 @@ object Raster {
       println("Done.")
     }
 
-    testRenderStochasticImage()
+//    testRenderStochasticImage()
 //    testRenderVoronoiImage()
+    testRenderVoronoiImage2()
   }
 
   def mkSphereCoordinatesTable(): Array[Float] = {
@@ -257,6 +331,7 @@ object Raster {
       }
       ch += 1
     }
+    require (off == RasterSize)
     val gain = (1.0 / buf(buf.length - 1)).toFloat
     off = 0
     while (off < buf.length) {
