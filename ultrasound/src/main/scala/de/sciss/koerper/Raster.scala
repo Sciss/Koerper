@@ -64,6 +64,15 @@ object Raster {
     val oval        = new Ellipse2D.Float
     val tempOut     = file("/data/temp/stoch-test/test-render-voronoi-%03d.png")
 
+    val tableCoords = for (ch <- 0 until Koerper.numChannels) yield {
+      readSphereCoordinateFile(ch)
+    }
+
+    val totalCoordNum = tableCoords.map(_.length/2).sum
+    assert(totalCoordNum == RasterSize)
+
+    val all = fibonacciSphere(RasterSize)
+
     (0 until 100).zipWithIndex.foreach { case (rot, ri) =>
       val fOut = formatTemplate(tempOut, ri + 1)
       if (!fOut.exists()) {
@@ -76,15 +85,18 @@ object Raster {
 
         val rnd = new util.Random(0L)
         for (ch <- 0 until Koerper.numChannels) {
-          val tableCoord = readSphereCoordinateFile(ch)
+          val tableCoord = tableCoords(ch)
           import numbers.Implicits._
           g.setColor(Color.getHSBColor(ch.linLin(0, Koerper.numChannels, 0.0f, 1.0f), 1f, 1f))
           for (_ <- 0 until 10000) {
-            val dotL = rnd.nextInt(tableCoord.length) & ~1
-//            val dotL  = dot << 1
-            val theta = tableCoord(dotL)
-            val phi   = tableCoord(dotL + 1)
-            val v0    = Polar(theta, phi).toCartesian
+//            val dotL = rnd.nextInt(tableCoord.length) & ~1
+////            val dotL  = dot << 1
+//            val theta = tableCoord(dotL)
+//            val phi   = tableCoord(dotL + 1)
+//            val v0    = Polar(theta, phi).toCartesian
+
+            val v0 = all(rnd.nextInt(all.length))
+
             val v = {
               val v1 = v0.rotateX(rot * 6.0.toRadians)
               v1.rotateY(rot * 3.0.toRadians)
