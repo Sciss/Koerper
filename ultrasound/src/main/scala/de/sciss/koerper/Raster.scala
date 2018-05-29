@@ -59,6 +59,53 @@ object Raster {
 
    */
 
+  def testRenderVoronoiImage(): Unit = {
+    val extent      = 1080
+    val oval        = new Ellipse2D.Float
+    val tempOut     = file("/data/temp/stoch-test/test-render-voronoi-%03d.png")
+
+    (0 until 100).zipWithIndex.foreach { case (rot, ri) =>
+      val fOut = formatTemplate(tempOut, ri + 1)
+      if (!fOut.exists()) {
+        val img       = new BufferedImage(extent, extent, BufferedImage.TYPE_INT_ARGB)
+        val g         = img.createGraphics()
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING  , RenderingHints.VALUE_ANTIALIAS_ON )
+        g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE  )
+        g.setColor(Color.black)
+        g.fillRect(0, 0, extent, extent)
+
+        val rnd = new util.Random(0L)
+        for (ch <- 0 until Koerper.numChannels) {
+          val tableCoord = readSphereCoordinateFile(ch)
+          import numbers.Implicits._
+          g.setColor(Color.getHSBColor(ch.linLin(0, Koerper.numChannels, 0.0f, 1.0f), 1f, 1f))
+          for (_ <- 0 until 10000) {
+            val dotL = rnd.nextInt(tableCoord.length) & ~1
+//            val dotL  = dot << 1
+            val theta = tableCoord(dotL)
+            val phi   = tableCoord(dotL + 1)
+            val v0    = Polar(theta, phi).toCartesian
+            val v = {
+              val v1 = v0.rotateX(rot * 6.0.toRadians)
+              v1.rotateY(rot * 3.0.toRadians)
+            }
+            if (v.z < 0) {
+//              import numbers.Implicits._
+              val x = v.x.linLin(-1, 1, 0, extent)
+              val y = v.y.linLin(-1, 1, 0, extent)
+              oval.setFrame(x - 1.0, y - 1.0, 2.0, 2.0)
+              g.fill(oval)
+              //        count += 1
+            }
+          }
+        }
+        g.dispose()
+        ImageIO.write(img, "png", fOut)
+        //    println(f"Hits $count of $N (or ${count * 100.0 / N}%g%%)")
+      }
+    }
+  }
+
   def testRenderStochasticImage(): Unit = {
     val tableCoord = mkSphereCoordinatesTable()
 
@@ -162,7 +209,8 @@ object Raster {
       println("Done.")
     }
 
-    testRenderStochasticImage()
+//    testRenderStochasticImage()
+    testRenderVoronoiImage()
   }
 
   def mkSphereCoordinatesTable(): Array[Float] = {
@@ -204,6 +252,15 @@ object Raster {
       buf(off) *= gain
       off += 1
     }
+    buf
+  }
+
+  def readSphereCoordinateFile(ch: Int): Array[Float] = {
+    val fIn   = SphereCoordFile(ch)
+    val spec  = AudioFile.readSpec(fIn)
+    val n     = spec.numFrames.toInt
+    val buf   = new Array[Float](n << 1)
+    readSphereCoordinateFile(buf, 0, ch)
     buf
   }
 
