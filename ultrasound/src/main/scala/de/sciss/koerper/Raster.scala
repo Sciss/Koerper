@@ -192,7 +192,7 @@ object Raster {
 
   def testRenderStochasticImage(): Unit = {
 //    val tableCoord = mkSphereCoordinatesTable()
-    val (tableCoord, tableData, tableSize) = mkStochasticTable(0, 2)
+    val (tableCoord, tableData, tableSize) = mkStochasticTable()
     println(s"tableSize = $tableSize, RasterSize = $RasterSize")
     require (tableSize > 0)
     val N          = RasterSize / 15; // sqrt(RasterSize).toInt
@@ -203,7 +203,7 @@ object Raster {
 
     (0 until 100 /* 1000 */).zipWithIndex.foreach { case (rot, ri) =>
       val fOut = formatTemplate(tempOut, ri + 1)
-      if (true || !fOut.exists()) {
+      if (!fOut.exists()) {
         val img       = new BufferedImage(extent, extent, BufferedImage.TYPE_INT_ARGB)
         val g         = img.createGraphics()
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING  , RenderingHints.VALUE_ANTIALIAS_ON )
@@ -346,6 +346,13 @@ object Raster {
     buf
   }
 
+  /**
+    *
+    * @param buf  the buffer to read the interleaved (theta, phi) tuples into
+    * @param off  "logical" offset, i.e. actual buffer offset divided by two
+    * @param ch   the channel from 0 until numChannels
+    * @return     "logical" offset, i.e. actual buffer offset divided by two
+    */
   def readSphereCoordinateFile(buf: Array[Float], off: Int, ch: Int): Int = {
     val fIn = SphereCoordFile(ch)
     val af  = AudioFile.openRead(fIn)
@@ -354,7 +361,7 @@ object Raster {
       val bh    = afBuf(0)
       val bv    = afBuf(1)
       val n     = af.numFrames.toInt
-      var off1  = off
+      var off1  = off << 1
       var rem   = n
       while (rem > 0) {
         val chunk = math.min(8192, rem)
