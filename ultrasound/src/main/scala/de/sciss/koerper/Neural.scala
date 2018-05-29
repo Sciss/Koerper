@@ -32,8 +32,8 @@ object Neural {
   }
 
   def run(): Unit = {
-    val tableCoord  = mkSphereCoordinatesTable()
-    val tableData   = mkStochasticTable()
+//    val tableCoord  = mkSphereCoordinatesTable()
+    val (tableCoord, tableData, tableSize) = mkStochasticTable()
     val N           = RasterSize / 15; // sqrt(RasterSize).toInt
 
     final class TestPD(seed: Long) extends PD {
@@ -41,7 +41,7 @@ object Neural {
 
       @tailrec
       def poll(loc: LocVar): Unit = {
-        val i0    = util.Arrays.binarySearch(tableData, rnd.nextFloat())
+        val i0    = util.Arrays.binarySearch(tableData, 0, tableSize, rnd.nextFloat())
         val i1    = if (i0 >= 0) i0 else -(i0 - 1)
         val dot   = if (i1 < tableData.length) i1 else tableData.length - 1
         val dotL  = dot << 1

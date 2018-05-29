@@ -191,38 +191,19 @@ object Raster {
   }
 
   def testRenderStochasticImage(): Unit = {
-    val tableCoord = mkSphereCoordinatesTable()
-
-//    {
-//      var ti = 0
-//      var xL = 0
-//      var xR = 0
-//      var yT = 0
-//      var yB = 0
-//      var zF = 0
-//      var zB = 0
-//
-//      while (ti < tableCoord.length) {
-//        val theta = tableCoord(ti); ti += 1
-//        val phi   = tableCoord(ti); ti += 1
-//        val xyz   = Polar(theta, phi).toCartesian
-//        if (xyz.x < 0) xL += 1 else if (xyz.x > 0) xR += 1
-//        if (xyz.y < 0) yT += 1 else if (xyz.y > 0) yB += 1
-//        if (xyz.z < 0) zF += 1 else if (xyz.z > 0) zB += 1
-//      }
-//      println(s"x = $xL/$xR, y = $yT/$yB, z = $zF/$zB")
-//    }
-
-    val tableData   = mkStochasticTable()
-    val N           = RasterSize / 15; // sqrt(RasterSize).toInt
+//    val tableCoord = mkSphereCoordinatesTable()
+    val (tableCoord, tableData, tableSize) = mkStochasticTable(0, 2)
+    println(s"tableSize = $tableSize, RasterSize = $RasterSize")
+    require (tableSize > 0)
+    val N          = RasterSize / 15; // sqrt(RasterSize).toInt
 
     val extent    = 1080
     val oval      = new Ellipse2D.Float
     val tempOut   = file("/data/temp/stoch-test/test-render-stoch-%03d.png")
 
-    (0 until 1000).zipWithIndex.foreach { case (rot, ri) =>
+    (0 until 100 /* 1000 */).zipWithIndex.foreach { case (rot, ri) =>
       val fOut = formatTemplate(tempOut, ri + 1)
-      if (!fOut.exists()) {
+      if (true || !fOut.exists()) {
         val img       = new BufferedImage(extent, extent, BufferedImage.TYPE_INT_ARGB)
         val g         = img.createGraphics()
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING  , RenderingHints.VALUE_ANTIALIAS_ON )
@@ -233,7 +214,7 @@ object Raster {
         //    var count     = 0
         //    println(s"LAST ${tableData.last}")
         for (_ <- 0 until N) {
-          val i0    = util.Arrays.binarySearch(tableData, random())
+          val i0    = util.Arrays.binarySearch(tableData, 0, tableSize, random().toFloat)
           val i1    = if (i0 >= 0) i0 else -(i0 - 1)
           val dot   = if (i1 < tableData.length) i1 else tableData.length - 1
           val dotL  = dot << 1
@@ -241,8 +222,8 @@ object Raster {
           val phi   = tableCoord(dotL + 1)
           val v0    = Polar(theta, phi).toCartesian
           val v = {
-            val v1 = v0.rotateX(rot * 0.23.toRadians)
-            v1.rotateY(rot * 0.11.toRadians)
+            val v1 = v0.rotateX(rot * 6.0 /* 0.23 */.toRadians)
+            v1.rotateY(rot * 3.0 /* 0.11 */.toRadians)
           }
           if (v.z < 0) {
             import numbers.Implicits._
@@ -310,43 +291,50 @@ object Raster {
     buf
   }
 
-  def mkStochasticTable(): Array[Double] = {
-    val bufOut  = new Array[Double](RasterSize)
+  def mkStochasticTable(chStart: Int = 0, chStop: Int = Koerper.numChannels): (Array[Float], Array[Float], Int) = {
+    val bufCoord= new Array[Float](RasterSize << 1)
+    val bufPix  = new Array[Float](RasterSize)
     val tempIn  = file("/data/temp/test-removeMap-%d.aif")
-    val bufW    = new Array[Array[Float]](1)
-    val bufIn   = new Array[Float](8192)
-    bufW(0)     = bufIn
+    val afBuf   = new Array[Array[Float]](1)
+    afBuf(0)    = bufPix
     var off     = 0
     var sum     = 0.0
-    var ch = 0
-    while (ch < Koerper.numChannels) {
+    var ch = chStart // 0
+    while (ch < chStop /* Koerper.numChannels */) {
       val fIn   = formatTemplate(tempIn, ch + 1)
+      val n1    = readSphereCoordinateFile(bufCoord, off = off, ch = ch)
       val afIn  = AudioFile.openRead(fIn)
       val n     = afIn.numFrames.toInt
-      var rem   = n
-      while (rem > 0) {
-        val chunk = math.min(8192, rem)
-        afIn.read(bufW, 0, chunk)
-        var i = 0
-        while (i < chunk) {
-          val value = bufIn(i)
+      require (n == n1, s"n = $n, n1 = $n1")
+
+      afIn.read(afBuf, off, n)
+      var read = off
+      val stop = read + n
+      while (read < stop) {
+        val value = bufPix(read)
+        if (value > 0.0) {
           sum += value
-          bufOut(off) = sum
+          bufPix  (off) = sum.toFloat
+          val offC  = off  << 1
+          val readC = read << 1
+          bufCoord(offC)      = bufCoord(readC)
+          bufCoord(offC + 1)  = bufCoord(readC + 1)
           off += 1
-          i += 1
         }
-        rem -= chunk
+        read += 1
       }
+
       ch += 1
     }
-    require (off == RasterSize)
-    val gain = 1.0 / sum
+//    require (off == RasterSize)
+    val gain = (1.0 / sum).toFloat
+    val stop = off
     off = 0
-    while (off < bufOut.length) {
-      bufOut(off) *= gain
+    while (off < stop) {
+      bufPix(off) *= gain
       off += 1
     }
-    bufOut
+    (bufCoord, bufPix, stop)
   }
 
   def readSphereCoordinateFile(ch: Int): Array[Float] = {
