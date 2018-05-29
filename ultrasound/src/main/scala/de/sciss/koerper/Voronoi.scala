@@ -200,43 +200,44 @@ object Voronoi {
             } else {
               val z   = sqrt(1 - d)
               val v0  = Pt3(x, y, z) // .normalized
-              val q   = {
-                val v1 = v0.rotateX(rot * 0.23 /* 6 */.toRadians)
-                v1.rotateY(rot * 0.11 /* 3.0 */.toRadians)
+              val p  = {
+                val v1 = v0.rotateX(rot * 6.toRadians)
+                v1.rotateY(rot * 3.0.toRadians)
               }
-              val tc    = voronoiCentersPt3.minBy(_.centralAngle(q))
+              val tc    = voronoiCentersPt3.minBy(_.centralAngle(p))
               val vIdx  = voronoiCentersPt3.indexOf(tc)
               val col = {
                 var bestExt     = Double.PositiveInfinity
-                var bestPos1    = 0.0
-                var bestPos2    = 0.0
+                var bestPosV    = 0.0
+                var bestPosH    = 0.0
                 var polyAccum   = 0.0
                 val polyIndices = voronoiPolygons(vIdx)
                 import kollflitz.Ops._
                 polyIndices.foreachPair { (pi1, pi2) =>
-                  val B         = voronoiCornersPt3(pi1)
-                  val D         = voronoiCornersPt3(pi2)
-                  val n         = B normalizedCross D
-                  val N         = q cross tc
-                  val v         = n cross B
-                  val H0        = -(N dot v) * B + (N dot B) * v
-                  val H         = H0.normalized
-                  val ext       = H.centralAngle(tc)
-                  val d3        = B.centralAngle(D)
+                  val c1        = voronoiCornersPt3(pi1)
+                  val c2        = voronoiCornersPt3(pi2)
+                  val n         = c1 normalizedCross c2
+                  val nn        = p cross tc
+                  val v         = n cross c1
+                  val h0        = -(nn dot v) * c1 + (nn dot c1) * v
+                  val h         = h0.normalized
+                  val ext       = h.centralAngle(tc)
+                  val d3        = c1.centralAngle(c2)
                   if (ext < bestExt) {
                     bestExt       = ext
+                    val d1        = c1.centralAngle(h)
                     //                    bestPos1      = q.centralAngle(tc) / ext
-                    bestPos1      = H.centralAngle(q) / ext
-                    val d1        = B.centralAngle(H)
-                    bestPos2      = polyAccum + d1
+//                    bestPosV      = h.centralAngle(p) / ext
+                    bestPosV      = p.centralAngle(tc) / ext
+                    bestPosH      = polyAccum + d1
                   }
                   polyAccum += d3
                 }
-                bestPos2 /= polyAccum
+                bestPosH /= polyAccum
                 // if (bestPos1 > 1.001) println(s"Ooops $bestPos1")
                 val i     = imgIn(vIdx)
-                val fy    = bestPos1 * i.getHeight
-                val fx    = bestPos2 * i.getWidth
+                val fy    = (1.0 - bestPosV) * i.getHeight
+                val fx    = bestPosH * i.getWidth
                 val iy    = fy.toInt
                 val ix    = fx.toInt
                 val wy2   = fy % 1.0

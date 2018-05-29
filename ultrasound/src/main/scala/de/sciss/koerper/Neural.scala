@@ -66,14 +66,15 @@ object Neural {
       lambda      = 1.0/50,
       maxNodes0   = N
     )
-    val sphere = SphereGNG(config)
+
+//    val sphere = SphereGNG(config)
 
 //    sphere.step()
-    for (_ <- 0 until 40000) sphere.step()
+//    for (_ <- 0 until 40000) sphere.step()
 
     val chart = new AWTChart(Quality.Nicest)
-    val sq = sphere.nodeIterator.toList
-    println(s"N = $N, sq.size = ${sq.size}")
+//    val sq = sphere.nodeIterator.toList
+//    println(s"N = $N, sq.size = ${sq.size}")
 
     def mkCoord(in: Polar): Coord3d = {
       import in._
@@ -84,27 +85,35 @@ object Neural {
       new Coord3d(x, y, z)
     }
 
-    sphere.edgeIterator.foreach { case (p1, p2) =>
-      val numIntp = math.max(2, (Polar.centralAngle(p1, p2) * 20).toInt)
-      val c = Vector.tabulate(numIntp) { i =>
-        val f = i.toDouble / (numIntp - 1)
-        val p = Polar.interpolate(p1, p2, f)
-        mkCoord(p)
-      }
-
-      val ln = new LineStrip(c: _*)
-      ln.setWireframeColor(Color.BLACK)
-      chart.add(ln)
-    }
-
-
+    val loc = new LocVar
+    val sq = Iterator.fill(100000) { config.pd.poll(loc); Polar(loc.theta, loc.phi) }
     sq.foreach { p =>
-      println(p)
       if (!p.phi.isNaN && !p.theta.isNaN) {
         val c = mkCoord(p)
-        chart.add(new Point(c, Color.RED, 5f))
+        chart.add(new Point(c, Color.BLACK, 2f))
       }
     }
+
+    //    sphere.edgeIterator.foreach { case (p1, p2) =>
+//      val numIntp = math.max(2, (Polar.centralAngle(p1, p2) * 20).toInt)
+//      val c = Vector.tabulate(numIntp) { i =>
+//        val f = i.toDouble / (numIntp - 1)
+//        val p = Polar.interpolate(p1, p2, f)
+//        mkCoord(p)
+//      }
+//
+//      val ln = new LineStrip(c: _*)
+//      ln.setWireframeColor(Color.BLACK)
+//      chart.add(ln)
+//    }
+//
+//    sq.foreach { p =>
+//      println(p)
+//      if (!p.phi.isNaN && !p.theta.isNaN) {
+//        val c = mkCoord(p)
+//        chart.add(new Point(c, Color.RED, 5f))
+//      }
+//    }
 
     val view = chart.getView
     view.setScaleX(new Scale(-1, +1))
