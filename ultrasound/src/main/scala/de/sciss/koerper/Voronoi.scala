@@ -226,10 +226,18 @@ object Voronoi {
                   if (ext < bestExt) {
                     bestExt       = ext
                     val d1        = c1.centralAngle(h)
-                    //                    bestPos1      = q.centralAngle(tc) / ext
-//                    bestPosV      = h.centralAngle(p) / ext
-                    bestPosV      = p.centralAngle(tc) / ext
-                    bestPosH      = polyAccum + d1
+                    if (d1 > d3) {
+                      // bestOk  = false
+                    } else {
+                      val d2      = h.centralAngle(c2)
+                      if (d2 > d3) {
+                        // bestOk = false
+                      } else {
+//                        bestPosV      = h.centralAngle(p) / ext
+                        bestPosV      = p.centralAngle(tc) / ext
+                        bestPosH      = polyAccum + d1
+                      }
+                    }
                   }
                   polyAccum += d3
                 }
