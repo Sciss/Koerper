@@ -220,8 +220,8 @@ object Raster {
       println("Done.")
     }
 
-//    testRenderStochasticImage()
-    testRenderVoronoiImage()
+    testRenderStochasticImage()
+//    testRenderVoronoiImage()
   }
 
   def mkSphereCoordinatesTable(): Array[Float] = {
