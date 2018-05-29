@@ -319,7 +319,8 @@ object Raster {
     var sum     = 0.0
     var ch = 0
     while (ch < Koerper.numChannels) {
-      val afIn  = AudioFile.openRead(formatTemplate(tempIn, ch + 1))
+      val fIn   = formatTemplate(tempIn, ch + 1)
+      val afIn  = AudioFile.openRead(fIn)
       val n     = afIn.numFrames.toInt
       afIn.read(bufW, off, n)
       val stop  = off + n
