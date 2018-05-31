@@ -12,51 +12,144 @@
  */
 
 package de.sciss.koerper
+package proto
 
+import java.net.InetSocketAddress
 import java.util
 
-import de.sciss.koerper.Raster.{RasterSize, mkStochasticTable}
+import de.sciss.koerper.proto.Raster.{RasterSize, mkStochasticTable}
 import de.sciss.neuralgas.sphere.{Edge, Loc, LocVar, Node, Observer, PD, Polar, SphereGNG}
+import de.sciss.osc
 import org.jzy3d.chart.{AWTChart, ChartLauncher}
 import org.jzy3d.colors.Color
 import org.jzy3d.maths.{Coord3d, Scale}
 import org.jzy3d.plot3d.primitives.{LineStrip, Point}
 import org.jzy3d.plot3d.rendering.canvas.Quality
-import org.jzy3d.plot3d.rendering.view.modes.ViewBoundMode
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.math.{cos, sin}
 import scala.swing.{BoxPanel, Button, Frame, Label, Orientation}
+import scala.util.control.NonFatal
 
 object Neural {
   def main(args: Array[String]): Unit = {
-    run()
+    testSendOsc()
   }
 
-  def run(): Unit = {
-//    val tableCoord  = mkSphereCoordinatesTable()
-    val (tableCoord, tableData, tableSize) = mkStochasticTable()
-    val N           = RasterSize / 15; // sqrt(RasterSize).toInt
+  def testSendOsc(): Unit = {
+    val N = 125 // RasterSize / 15; // sqrt(RasterSize).toInt
 
-    final class TestPD(seed: Long) extends PD {
-      private[this] val rnd = new util.Random(seed)
+    val oscCfg    = osc.UDP.Config()
+    oscCfg.codec  = osc.PacketCodec().doublePrecision()
+    val target    = new InetSocketAddress(Koerper.IpDavid, Koerper.OscPortDavid)
+    val oscT      = osc.UDP.Transmitter(oscCfg)
+    oscT.connect()
 
-      @tailrec
-      def poll(loc: LocVar): Unit = {
-        val i0    = util.Arrays.binarySearch(tableData, 0, tableSize, rnd.nextFloat())
-        val i1    = if (i0 >= 0) i0 else -(i0 - 1)
-        val dot   = if (i1 < tableData.length) i1 else tableData.length - 1
-        val dotL  = dot << 1
-        val theta = tableCoord(dotL)
-        val phi   = tableCoord(dotL + 1)
-        if (theta == 0.0 && phi == 0.0) poll(loc)
-        else {
-          loc.theta = theta
-          loc.phi   = phi
+    oscT.dump()
+
+    object obs extends Observer {
+      // private def log(what: => String): Unit = ()  // println(what)
+
+      private var COUNT = 0
+
+      private def send(m: osc.Message): Unit = try {
+        COUNT += 1
+//        if (COUNT <= 3) {
+          oscT.send(m, target)
+//        }
+      } catch {
+        case NonFatal(_) =>
+      }
+
+      def gngNodeInserted(n: Node): Unit = {
+        // [ "/n_new", <(int32) id>, <(float64) theta>, <(float64) phi> ]
+        this send osc.Message("/n_new", n.id: Int, n.theta: Double, n.phi: Double)
+      }
+
+      def gngNodeRemoved(n: Node): Unit = {
+        // [ "/n_end", <(int32) id> ]
+        this send osc.Message("/n_end", n.id: Int)
+      }
+
+      def gngNodeUpdated(n: Node): Unit = {
+        // [ "/n_set", <(int32) id>, <(float64) theta>, <(float64) phi> ]
+        this send osc.Message("/n_set", n.id: Int, n.theta: Double, n.phi: Double)
+      }
+
+      private def edgeChange(cmd: String, e: Edge): Unit = {
+        val idFrom  = e.from.id
+        val idTo    = e.to  .id
+        val id1     = if (idFrom <= idTo) idFrom else idTo
+        val id2     = if (idFrom <= idTo) idTo   else idFrom
+        this send osc.Message(cmd, id1: Int, id2: Int)
+      }
+
+      def gngEdgeInserted(e: Edge): Unit = {
+        // [ "/e_new", <(int32) node-id1>, <(int32) node-id2> ]
+        edgeChange("/e_new", e)
+      }
+
+      def gngEdgeRemoved(e: Edge): Unit = {
+        // [ "/e_end", <(int32) node-id1>, <(int32) node-id2> ]
+        edgeChange("/e_end", e)
+      }
+
+      def gngEdgeUpdated(e: Edge): Unit = {
+        // [ "/e_age", <(int32) node-id1>, <(int32) node-id2> ]
+        edgeChange("/e_age", e)
+      }
+    }
+
+    val config = SphereGNG.Config(
+      pd          = new TestPD(seed = 12345),
+      maxEdgeAge  = 5000,
+      utility     = 20,
+      beta        = 0.0005,
+      epsilon     = 0.1,
+      epsilon2    = 0.001,
+      alpha       = 0.5,
+      lambda      = 1.0/50,
+      maxNodes0   = N,
+      observer    = obs
+    )
+
+    val sphere    = SphereGNG(config)
+    val thread    = new Thread("osc-send") {
+      override def run(): Unit = {
+        while (true) {
+          sphere.step()
+          Thread.sleep(10)
         }
       }
     }
+
+    thread.start()
+  }
+
+  final class TestPD(seed: Long) extends PD {
+    private[this] val (tableCoord, tableData, tableSize) = mkStochasticTable()
+    private[this] val rnd = new util.Random(seed)
+
+    @tailrec
+    def poll(loc: LocVar): Unit = {
+      val i0    = util.Arrays.binarySearch(tableData, 0, tableSize, rnd.nextFloat())
+      val i1    = if (i0 >= 0) i0 else -(i0 - 1)
+      val dot   = if (i1 < tableData.length) i1 else tableData.length - 1
+      val dotL  = dot << 1
+      val theta = tableCoord(dotL)
+      val phi   = tableCoord(dotL + 1)
+      if (theta == 0.0 && phi == 0.0) poll(loc)
+      else {
+        loc.theta = theta
+        loc.phi   = phi
+      }
+    }
+  }
+
+  def test3dView(): Unit = {
+//    val tableCoord  = mkSphereCoordinatesTable()
+    val N           = RasterSize / 15; // sqrt(RasterSize).toInt
 
     val chart = new AWTChart(Quality.Nicest)
 //    val sq = sphere.nodeIterator.toList
@@ -233,7 +326,7 @@ object Neural {
       contents = new BoxPanel(Orientation.Vertical) {
         contents += Button("Step") {
           obs.redraw = false
-          val numSteps = 50
+          val numSteps = 100
           for (_ <- 1 until numSteps) sphere.step()
           obs.redraw = true
           sphere.step()

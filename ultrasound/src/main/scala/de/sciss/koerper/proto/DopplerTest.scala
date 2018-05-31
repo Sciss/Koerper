@@ -12,34 +12,23 @@
  */
 
 package de.sciss.koerper
+package proto
 
 import de.sciss.file._
 import de.sciss.fscape.stream.Control
 import de.sciss.fscape.{GE, Graph, graph}
-import de.sciss.numbers.Implicits._
 import de.sciss.synth.io.AudioFile
 
 object DopplerTest {
 
-  case class Config(dbMin     : Double  = -66.0,
-                    dbMax     : Double  = -18.0,
-                    freqMin   : Double  = 39500.0,
-                    freqMax   : Double  = 40000.0.squared / 39500.0,
-                    numBands  : Int     = 384,
-                    fftSize   : Int     = 8192,
-                    timeResMS : Double  = 4.0,
-                    gainIn    : Double  = 40.0,
-                    sr        : Double  = 96000.0
-                   )
-
   def main(args: Array[String]): Unit = {
-    run(Config())
+    run(ConstQConfig())
   }
 
   // returns squared coefficients
-  def analyze(in: GE, config: Config): GE = {
-    import graph._
+  def analyze(in: GE, config: ConstQConfig): GE = {
     import config._
+    import graph._
     val winStep   = calcWinStep(config)
     val minFreqN  = freqMin / sr
     val maxFreqN  = freqMax / sr
@@ -55,19 +44,27 @@ object DopplerTest {
     constQ
   }
 
-  def calcWinStep(config: Config): Int = {
+  def calcWinStep(config: ConstQConfig): Int = {
     import config._
     math.min(fftSize, (timeResMS / 1000 * sr + 0.5).toInt)
   }
 
-  def calcNumWin(numFrames: Long, config: Config): Int = {
-    import config._
+  def calcNumWin(numFrames: Long, config: ConstQConfig): Int = {
     val winStep   = calcWinStep(config)
     val numWin    = ((numFrames /* - fftSize */ + winStep - 1) / winStep).toInt
     numWin
   }
 
-  def run(config: Config): Unit = {
+//  private def any2stringadd(x: Any): Nothing = throw new NotImplementedError()
+
+  def calcNumWin(numFrames: GE, config: ConstQConfig): GE = {
+    import de.sciss.fscape._
+    val winStep   = calcWinStep(config)
+    val numWin    = ((numFrames + winStep - 1) / winStep).floor // toInt
+    numWin
+  }
+
+  def run(config: ConstQConfig): Unit = {
     import config._
     val fIn       = file("/data/projects/Koerper/audio_work/TestRec180517-cordial-neu1.aif")
     val specIn    = AudioFile.readSpec(fIn)

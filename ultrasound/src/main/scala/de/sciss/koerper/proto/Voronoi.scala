@@ -12,13 +12,14 @@
  */
 
 package de.sciss.koerper
+package proto
 
 import java.awt.Color
 import java.awt.image.BufferedImage
 
 import de.sciss.file._
 import de.sciss.intensitypalette.IntensityPalette
-import de.sciss.koerper.Geom._
+import de.sciss.koerper.proto.Geom._
 import de.sciss.kollflitz
 import de.sciss.kollflitz.Vec
 import de.sciss.numbers.Implicits._

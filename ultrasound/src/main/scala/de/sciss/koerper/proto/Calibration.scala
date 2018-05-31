@@ -12,11 +12,12 @@
  */
 
 package de.sciss.koerper
+package proto
 
 import de.sciss.file._
 import de.sciss.fscape.stream.Control
 import de.sciss.fscape.{Graph, graph}
-import de.sciss.koerper.DopplerTest.{Config, analyze, calcNumWin, calcWinStep}
+import de.sciss.koerper.proto.DopplerTest.{analyze, calcNumWin, calcWinStep}
 import de.sciss.numbers.Implicits._
 import de.sciss.synth.io.{AudioFile, AudioFileSpec}
 
@@ -24,7 +25,7 @@ object Calibration {
   def main(args: Array[String]): Unit = {
 //     run(Config())
 //    testRead()
-    testApply(Config())
+    testApply(ConstQConfig())
   }
 
   def formatTemplate(f: File, args: Any*): File = {
@@ -32,7 +33,7 @@ object Calibration {
     f.replaceName(name)
   }
 
-  def testApply(config: Config): Unit = {
+  def testApply(config: ConstQConfig): Unit = {
     import config._
     val tempIn    = file("/data/projects/Koerper/audio_work/us-180512-approach-continuous-motu-%d.aif")
     val fCalib    = file("/data/temp/test-calib.aif")
@@ -72,7 +73,7 @@ object Calibration {
     }
   }
 
-  def testApplyQ(config: Config): Unit = {
+  def testApplyQ(config: ConstQConfig): Unit = {
     import config._
     val tempIn    = file("/data/projects/Koerper/audio_work/us-180512-approach-continuous-motu-%d.aif")
     val fCalib    = file("/data/temp/test-calib.aif")
@@ -142,7 +143,7 @@ object Calibration {
     }
   }
 
-  def run(config: Config): Unit = {
+  def run(config: ConstQConfig): Unit = {
     import config._
     val fIn       = file("/data/temp/us-180512-calib-continuous-motu.aif")
     val specIn    = AudioFile.readSpec(fIn)
@@ -168,7 +169,7 @@ object Calibration {
     }
   }
 
-  def runOLD(config: Config): Unit = {
+  def runOLD(config: ConstQConfig): Unit = {
     import config._
     val fIn       = file("/data/temp/us-180512-calib-continuous-motu.aif")
     val specIn    = AudioFile.readSpec(fIn)

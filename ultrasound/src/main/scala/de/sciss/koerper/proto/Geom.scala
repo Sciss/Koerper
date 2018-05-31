@@ -12,6 +12,7 @@
  */
 
 package de.sciss.koerper
+package proto
 
 import de.sciss.numbers.Implicits._
 

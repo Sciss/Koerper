@@ -12,21 +12,22 @@
  */
 
 package de.sciss.koerper
+package proto
 
 import java.awt.geom.Ellipse2D
-import java.awt.{Color, RenderingHints}
 import java.awt.image.BufferedImage
+import java.awt.{Color, RenderingHints}
 import java.util
 
 import de.sciss.file._
 import de.sciss.fscape.stream.Control
 import de.sciss.fscape.{Graph, graph}
-import de.sciss.koerper.Calibration.formatTemplate
-import de.sciss.koerper.DopplerTest.{Config, analyze, calcNumWin}
-import de.sciss.koerper.Geom._
-import de.sciss.koerper.Voronoi.{ScalarOps, voronoiCentersPt3, voronoiCornersPt3, voronoiPolygons}
-import de.sciss.kollflitz
-import de.sciss.numbers
+import de.sciss.koerper.Koerper
+import de.sciss.koerper.proto.Calibration.formatTemplate
+import de.sciss.koerper.proto.DopplerTest.{analyze, calcNumWin}
+import de.sciss.koerper.proto.Geom._
+import de.sciss.koerper.proto.Voronoi.{ScalarOps, voronoiCentersPt3, voronoiCornersPt3, voronoiPolygons}
+import de.sciss.{kollflitz, numbers}
 import de.sciss.synth.io.{AudioFile, AudioFileSpec}
 import javax.imageio.ImageIO
 
@@ -35,16 +36,6 @@ import scala.concurrent.duration.Duration
 import scala.math._
 
 object Raster {
-  def VoronoiCoordFile(ch: Int): File = {
-    require (ch >= 0 && ch < Koerper.numChannels)
-    Koerper.auxDir / s"voronoi_coord-${ch+1}.aif"
-  }
-
-  def SphereCoordFile(ch: Int): File = {
-    require (ch >= 0 && ch < Koerper.numChannels)
-    Koerper.auxDir / s"sphere_coord-${ch+1}.aif"
-  }
-
 //  private final val CoordCookie = 0x436F6F72  // "Coor"
 
   /*
@@ -261,8 +252,8 @@ object Raster {
   final val RasterSize = 2970204
 
   def main(args: Array[String]): Unit = {
-    val config = Config()
-    if (!VoronoiCoordFile(0).exists) {
+    val config = ConstQConfig()
+    if (!Koerper.VoronoiCoordFile(0).exists) {
       println("Creating coordinate files...")
       createCoordinateFiles()
       println("Done.")
@@ -338,7 +329,7 @@ object Raster {
   }
 
   def readSphereCoordinateFile(ch: Int): Array[Float] = {
-    val fIn   = SphereCoordFile(ch)
+    val fIn   = Koerper.SphereCoordFile(ch)
     val spec  = AudioFile.readSpec(fIn)
     val n     = spec.numFrames.toInt
     val buf   = new Array[Float](n << 1)
@@ -354,7 +345,7 @@ object Raster {
     * @return     "logical" offset, i.e. actual buffer offset divided by two
     */
   def readSphereCoordinateFile(buf: Array[Float], off: Int, ch: Int): Int = {
-    val fIn = SphereCoordFile(ch)
+    val fIn = Koerper.SphereCoordFile(ch)
     val af  = AudioFile.openRead(fIn)
     try {
       val afBuf = af.buffer(8192)
@@ -389,8 +380,8 @@ object Raster {
       val tc          = voronoiCentersPt3 (vi)
       val polyIndices = voronoiPolygons   (vi)
 
-      val fVOut       = VoronoiCoordFile  (vi)
-      val fSpOut      = SphereCoordFile   (vi)
+      val fVOut       = Koerper.VoronoiCoordFile  (vi)
+      val fSpOut      = Koerper.SphereCoordFile   (vi)
       // sr is arbitrary
       val afVOut      = AudioFile.openWrite(fVOut , AudioFileSpec(numChannels = 2, sampleRate = 96000.0))
       val afSphOut    = AudioFile.openWrite(fSpOut, AudioFileSpec(numChannels = 2, sampleRate = 96000.0))
@@ -492,7 +483,7 @@ object Raster {
     }
   }
 
-  def testApplyAndMapVoronoi(config: Config): Unit = {
+  def testApplyAndMapVoronoi(config: ConstQConfig): Unit = {
     import config._
     val tempIn    = file("/data/projects/Koerper/audio_work/us-180512-approach-continuous-motu-%d.aif")
     val fCalib    = file("/data/temp/test-calib.aif")
@@ -521,7 +512,7 @@ object Raster {
 //        RunningMin(rot).last.poll(0, "min")
 //        RunningMax(rot).last.poll(0, "max")
         val max       = rot.ampDb.linLin(dbMin, dbMax, 0.0, 1.0).clip()
-        val fCoord    = VoronoiCoordFile(ch)
+        val fCoord    = Koerper.VoronoiCoordFile(ch)
         val coord     = AudioFileIn(fCoord, numChannels = 2)
         val posH      = coord.out(0) * numWin
         val posV      = coord.out(1) * numBands
