@@ -77,7 +77,6 @@ object RenderProbabilityDistribution {
 
       def inAll     = AudioFileIn("audio-in")   // `def` because the channels will be concatenated
       def calibAll  = AudioFileIn("calib-in")   // dito
-//      def calibAll  = de.sciss.fscape.graph.AudioFileIn(new java.io.File("/data/temp/test-calib.aif"), numChannels = 1)
 
       val numWin0   = calcNumWin(inAll.numFrames)
       val numWin    = numWin0 min 8192
@@ -98,20 +97,25 @@ object RenderProbabilityDistribution {
         val posH      = coordV.out(0) * numWin
         val posV      = coordV.out(1) * numBands
         val scanned   = ScanImage(max, width = numBands, height = numWin, x = posV, y = posH, zeroCrossings = 0)
-        val isZero    = scanned sig_== 0.0
-        val dataF     = FilterSeq(scanned         , isZero)
-        val thetaF    = FilterSeq(coordSph.out(0) , isZero)
-        val phiF      = FilterSeq(coordSph.out(1) , isZero)
+        val nonZero   = scanned sig_!= 0.0
+        val dataF     = FilterSeq(scanned         , nonZero)
+        val thetaF    = FilterSeq(coordSph.out(0) , nonZero)
+        val phiF      = FilterSeq(coordSph.out(1) , nonZero)
 
         (dataF, thetaF, phiF)
       }
 
-      val (outData, outTheta, outPhi) = outSeq.unzip3
+      val (outData0, outTheta0, outPhi0) = outSeq.unzip3
 
       def cat(seq: Seq[GE]): GE = seq.reduceLeft(_ ++ _)
 
-      val outInteg  = RunningSum(cat(outData))
-      val outSig    = Seq(outInteg, cat(outTheta), cat(outPhi)): GE
+      val outData   = cat(outData0  )
+      val outTheta  = cat(outTheta0 )
+      val outPhi    = cat(outPhi0   )
+
+      // we'll integrate later when we have double precision?
+      val outInteg  = outData // RunningSum(outData)
+      val outSig    = Seq(outInteg, outTheta, outPhi): GE
 
       /* val framesOut = */ AudioFileOut("table-out", in = outSig)
 
@@ -130,18 +134,28 @@ object RenderProbabilityDistribution {
     for (ch <- 0 until Koerper.numChannels) {
       val artV    = Artifact(locBase, Artifact.Child(s"voronoi_coord-%d.aif".format(ch+1)))
       val artSph  = Artifact(locBase, Artifact.Child(s"sphere_coord-%d.aif" .format(ch+1)))
-      a.put(TKeyVoronoiIn.format(ch+1), artV  )
-      a.put(TKeySphereIn .format(ch+1), artSph)
+      a.put(TKeyVoronoiIn.format(ch+1), mkCue(artV  ))
+      a.put(TKeySphereIn .format(ch+1), mkCue(artSph))
     }
 
     // XXX TODO: Testing
     val locTemp       = ArtifactLocation.newConst(new java.io.File("/data/temp/"))
     val artCalibTemp  = Artifact(locTemp, Artifact.Child("test-calib.aif"))
-    a.put(KeyCalibIn, artCalibTemp)
+    a.put(KeyCalibIn, mkCue(artCalibTemp))
+
+    val aDone = mkDoneAction[S]()
+    a.put("done", aDone)
 
     f.name = ValueName
 
     f :: Nil
+  }
+
+  private def mkCue[S <: Sys[S]](a: Artifact[S])(implicit tx: S#Tx): AudioCue.Obj[S] = {
+    val artVal = a.value
+    val spec   = de.sciss.synth.io.AudioFile.readSpec(artVal)
+    val cue    = AudioCue.Obj(a, spec, offset = 0L, gain = 1.0)
+    cue
   }
 
   private def mkDoneAction[S <: Sys[S]]()(implicit tx: S#Tx): Obj[S] = {
