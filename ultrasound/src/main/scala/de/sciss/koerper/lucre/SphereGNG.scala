@@ -98,6 +98,18 @@ object SphereGNG extends Obj.Type {
 
   /** Value of type `IntObj` */
   final val attrGngMaxNeighbors = "gng-max-neighbors"
+
+  /** This excludes `attrTable` */
+  val configAttr: Set[String] = Set(
+    attrGngEpsilon    , attrGngEpsilon2 , attrGngBeta     , attrGngAlpha      ,
+    attrGngLambda     , attrGngUtility  , attrGngMaxNodes , attrGngMaxEdgeAge ,
+    attrGngMaxNeighbors
+  )
+
+  /** This excludes `attrTable` */
+  val oscAttr: Set[String] = Set(
+    attrOscTargetHost , attrOscTargetPort , attrOscTransport, attrOscLocalHost, attrOscLocalPort
+  )
 }
 /** A parameters are modelled by the attribute map. */
 trait SphereGNG[S <: Sys[S]] extends Obj[S] /* with Publisher[S, SphereGNG.Update[S]] */ {

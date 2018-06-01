@@ -18,11 +18,11 @@ import de.sciss.desktop.OptionPane
 import de.sciss.icons.raphael
 import de.sciss.lucre.stm
 import de.sciss.lucre.stm.Obj
-import de.sciss.lucre.swing.Window
+import de.sciss.lucre.swing.{View, Window}
 import de.sciss.lucre.synth.Sys
 import de.sciss.mellite.gui.impl.ListObjViewImpl.NonEditable
-import de.sciss.mellite.gui.impl.{ListObjViewImpl, ObjViewImpl}
-import de.sciss.mellite.gui.{ListObjView, ObjView}
+import de.sciss.mellite.gui.impl.{ListObjViewImpl, ObjViewImpl, WindowImpl}
+import de.sciss.mellite.gui.{AttrCellView, ListObjView, ObjView}
 import de.sciss.synth.proc.Workspace
 import javax.swing.Icon
 
@@ -82,15 +82,14 @@ object SphereGNGObjView extends ListObjView.Factory {
 
     def openView(parent: Option[Window[S]])
                 (implicit tx: S#Tx, workspace: Workspace[S], cursor: stm.Cursor[S]): Option[Window[S]] = {
-      None
-//      val _obj      = objH()
-//      val title     = AttrCellView.name(_obj)
-//      val _view     = NegatumView(_obj)
-//      val frame     = new WindowImpl[S](title) {
-//        val view = _view
-//      }
-//      frame.init()
-//      Some(frame)
+      val _obj      = objH()
+      val title     = AttrCellView.name(_obj)
+      val _view     = SphereGNGView(_obj)
+      val frame     = new WindowImpl[S](title) {
+        val view: View[S] = _view
+      }
+      frame.init()
+      Some(frame)
     }
   }
 }
