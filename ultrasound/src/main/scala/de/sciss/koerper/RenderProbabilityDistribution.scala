@@ -15,8 +15,13 @@ package de.sciss.koerper
 
 import de.sciss.fscape.GE
 import de.sciss.fscape.lucre.{FScape, MacroImplicits}
-import de.sciss.lucre.stm.{Obj, Sys}
+import de.sciss.lucre.artifact.{Artifact, ArtifactLocation}
+import de.sciss.lucre.stm.Obj
+import de.sciss.lucre.synth.Sys
+import de.sciss.synth.proc
 import de.sciss.synth.proc.Implicits._
+import de.sciss.synth.proc.MacroImplicits._
+import de.sciss.synth.proc.{AudioCue, Ensemble, Folder, Proc}
 
 object RenderProbabilityDistribution {
   final val KeyAudioIn    = "audio-in"
@@ -27,7 +32,7 @@ object RenderProbabilityDistribution {
 
   final val ValueName     = "render-pd"
 
-  def mkObj[S <: Sys[S]](config: Obj[S])(implicit tx: S#Tx): FScape[S] = {
+  def mkObjects[S <: Sys[S]](config: Obj[S], locBase: ArtifactLocation[S])(implicit tx: S#Tx): List[Obj[S]] = {
     import MacroImplicits._
     import de.sciss.fscape.graph.{AudioFileIn => _, AudioFileOut => _, _}
     import de.sciss.fscape.lucre.graph.Ops._
@@ -71,9 +76,8 @@ object RenderProbabilityDistribution {
       }
 
       def inAll     = AudioFileIn("audio-in")   // `def` because the channels will be concatenated
-//      def calibAll  = AudioFileIn("calib-in")   // dito
-      // XXX TODO testing
-      def calibAll  = de.sciss.fscape.graph.AudioFileIn(new java.io.File("/data/temp/test-calib.aif"), numChannels = 1)
+      def calibAll  = AudioFileIn("calib-in")   // dito
+//      def calibAll  = de.sciss.fscape.graph.AudioFileIn(new java.io.File("/data/temp/test-calib.aif"), numChannels = 1)
 
       val numWin0   = calcNumWin(inAll.numFrames)
       val numWin    = numWin0 min 8192
@@ -110,6 +114,8 @@ object RenderProbabilityDistribution {
       val outSig    = Seq(outInteg, cat(outTheta), cat(outPhi)): GE
 
       /* val framesOut = */ AudioFileOut("table-out", in = outSig)
+
+      OnComplete("done")
     }
 
 //    f.graph() = g
@@ -121,8 +127,43 @@ object RenderProbabilityDistribution {
       ca.get(key).foreach(value => a.put(key, value))
     }
 
+    for (ch <- 0 until Koerper.numChannels) {
+      val artV    = Artifact(locBase, Artifact.Child(s"voronoi_coord-%d.aif".format(ch+1)))
+      val artSph  = Artifact(locBase, Artifact.Child(s"sphere_coord-%d.aif" .format(ch+1)))
+      a.put(TKeyVoronoiIn.format(ch+1), artV  )
+      a.put(TKeySphereIn .format(ch+1), artSph)
+    }
+
+    // XXX TODO: Testing
+    val locTemp       = ArtifactLocation.newConst(new java.io.File("/data/temp/"))
+    val artCalibTemp  = Artifact(locTemp, Artifact.Child("test-calib.aif"))
+    a.put(KeyCalibIn, artCalibTemp)
+
     f.name = ValueName
 
-    f
+    f :: Nil
+  }
+
+  private def mkDoneAction[S <: Sys[S]]()(implicit tx: S#Tx): Obj[S] = {
+    val a = proc.Action.apply[S] { u =>
+      import de.sciss.fscape.lucre.FScape
+      import de.sciss.fscape.stream.Control
+      import de.sciss.synth.proc.GenContext
+
+      // store the chunk in the 'us' folder
+      val folderPD  = u.root ![Folder] "pd"
+      val fsc       = u.root ![FScape] "render-pd"
+      val artTab    = fsc.attr ![Artifact] "table-out"
+      val artTabVal = artTab.value
+      val specTab   = de.sciss.synth.io.AudioFile.readSpec(artTabVal)
+      val cueTab    = AudioCue.Obj(artTab, specTab, offset = 0L, gain = 1.0)
+      cueTab.name   = artTabVal.getName
+      folderPD.addLast(cueTab)
+
+      println("Yo Chuck!")
+    }
+
+    a.name = "pd-done"
+    a
   }
 }

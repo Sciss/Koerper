@@ -119,7 +119,7 @@ object RecordAudioChunk {
       val cfgFsc    = Control.Config()
       import u.{cursor, workspace}
       implicit val gtx: GenContext[S] = GenContext[S]
-      val r         = FScape.Rendering(fsc, cfgFsc)
+      /* val r = */ FScape.Rendering(fsc, cfgFsc)
     }
 
     a.name = "rec-done"

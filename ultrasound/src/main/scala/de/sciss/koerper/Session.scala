@@ -43,9 +43,9 @@ object Session {
     ws.cursor.step { implicit tx =>
       val folder    = ws.root
       val listB     = List.newBuilder[Obj[S]]
-      val artBase   = ArtifactLocation.newVar[S](Koerper.auxDir)
-      artBase.name  = NameLocBase
-      listB += artBase
+      val locBase   = ArtifactLocation.newVar[S](Koerper.auxDir)
+      locBase.name  = NameLocBase
+      listB += locBase
       val folderUS  = Folder[S]
       folderUS.name = NameFolderUS
       listB += folderUS
@@ -53,8 +53,8 @@ object Session {
       listB ++= recChunk
       val constQ    = ConstQConfig.mkObj[S](ConstQConfig())
       listB += constQ
-      val renderPD  = RenderProbabilityDistribution.mkObj(constQ)
-      listB += renderPD
+      val renderPD  = RenderProbabilityDistribution.mkObjects(constQ, locBase)
+      listB ++= renderPD
       val folderPD  = Folder[S]
       folderPD.name = NameFolderPD
       listB += folderPD
