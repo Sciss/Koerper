@@ -15,16 +15,14 @@ package de.sciss.koerper
 
 import de.sciss.fscape.GE
 import de.sciss.fscape.lucre.{FScape, MacroImplicits}
-import de.sciss.lucre.expr.StringObj
 import de.sciss.lucre.stm.{Obj, Sys}
 import de.sciss.synth.proc.Implicits._
-import de.sciss.synth.proc.ObjKeys
 
 object RenderProbabilityDistribution {
-  final val TKeyAudioIn   = "audio-in-%d"
+  final val KeyAudioIn    = "audio-in"
   final val TKeyVoronoiIn = "voronoi-in-%d"
   final val TKeySphereIn  = "sphere-in-%d"
-  final val TKeyCalibIn   = "calib-in-%d"
+  final val KeyCalibIn    = "calib-in"
   final val KeyTableOut   = "table-out"
 
   final val ValueName     = "render-pd"
@@ -72,12 +70,18 @@ object RenderProbabilityDistribution {
         numWin
       }
 
-      val outSeq = for (ch <- 1 to 5) yield {
-        val in0       = AudioFileIn("audio-in-%d".format(ch))
+      def inAll     = AudioFileIn("audio-in")   // `def` because the channels will be concatenated
+//      def calibAll  = AudioFileIn("calib-in")   // dito
+      // XXX TODO testing
+      def calibAll  = de.sciss.fscape.graph.AudioFileIn(new java.io.File("/data/temp/test-calib.aif"), numChannels = 1)
+
+      val numWin0   = calcNumWin(inAll.numFrames)
+      val numWin    = numWin0 min 8192
+
+      val outSeq = for (ch <- 0 until 5) yield {
+        val in0       = inAll.out(ch)
         val in        = in0 * gainIn
-        val numWin0   = calcNumWin(in0.numFrames)
-        val numWin    = numWin0 min 8192
-        val calib     = AudioFileIn("calib-in-%d".format(ch))
+        val calib     = calibAll.out(ch)
         val calibR    = RepeatWindow(calib, size = numBands, num = numWin)
         val constQ    = analyze(in)
         val norm      = constQ.sqrt
@@ -85,8 +89,8 @@ object RenderProbabilityDistribution {
         val thresh    = norm - min
         val rot       = thresh
         val max       = rot.ampDb.linLin(dbMin, dbMax, 0.0, 1.0).clip()
-        val coordV    = AudioFileIn("voronoi-in-%d".format(ch))
-        val coordSph  = AudioFileIn("sphere-in-%d" .format(ch))
+        val coordV    = AudioFileIn("voronoi-in-%d".format(ch+1))
+        val coordSph  = AudioFileIn("sphere-in-%d" .format(ch+1))
         val posH      = coordV.out(0) * numWin
         val posV      = coordV.out(1) * numBands
         val scanned   = ScanImage(max, width = numBands, height = numWin, x = posV, y = posH, zeroCrossings = 0)

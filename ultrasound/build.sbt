@@ -36,17 +36,17 @@ lazy val root = project.in(file("."))
 lazy val deps = new {
   val main = new {
     val fileUtil          = "1.1.3"
-    val fscape            = "2.15.3-SNAPSHOT"
+    val fscape            = "2.15.3"
     val intensityPalette  = "1.0.0"
     val jzy3d             = "1.0.2"
     val kdTree            = "0.1.1"
     val kollflitz         = "0.2.2"
     val lucre             = "3.8.0"
-    val neuralGas         = "2.3.2-SNAPSHOT"
+    val neuralGas         = "2.3.2"
     val numbers           = "0.2.0"
     val scalaOSC          = "1.1.6"
     val scopt             = "3.7.0"
-    val soundProcesses    = "3.20.1-SNAPSHOT"
+    val soundProcesses    = "3.20.1"
     val swingPlus         = "0.3.0"
   }
 }

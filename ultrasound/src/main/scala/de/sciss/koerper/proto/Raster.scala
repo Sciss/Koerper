@@ -285,7 +285,7 @@ object Raster {
   def mkStochasticTable(chStart: Int = 0, chStop: Int = Koerper.numChannels): (Array[Float], Array[Float], Int) = {
     val bufCoord= new Array[Float](RasterSize << 1)
     val bufPix  = new Array[Float](RasterSize)
-    val tempIn  = file("/data/temp/test-removeMap-%d.aif")
+    val tempIn  = Koerper.auxDir / "test-removeMap-%d.aif"
     val afBuf   = new Array[Array[Float]](1)
     afBuf(0)    = bufPix
     var off     = 0

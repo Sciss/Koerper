@@ -87,16 +87,39 @@ object RecordAudioChunk {
 
   private def mkDoneAction[S <: Sys[S]]()(implicit tx: S#Tx): Obj[S] = {
     val a = proc.Action.apply[S] { u =>
-      val folder  = u.root ![Folder] "us"
-      val ens     = u.root ![Ensemble] "rec-audio-chunk"
+      import de.sciss.fscape.lucre.FScape
+      import de.sciss.fscape.stream.Control
+      import de.sciss.synth.proc.GenContext
+
+      // store the chunk in the 'us' folder
+      val folderUS  = u.root ![Folder] "us"
+      val ens       = u.root ![Ensemble] "rec-audio-chunk"
       ens.stop()
-      val pRec    = ens ![Proc] "proc"
-      val art     = pRec.attr ![Artifact] "out"
-      val artVal  = art.value
-      val spec    = de.sciss.synth.io.AudioFile.readSpec(artVal)
-      val cue     = AudioCue.Obj(art, spec, offset = 0L, gain = 1.0)
-      cue.name    = artVal.getName
-      folder.addLast(cue)
+      val pRec      = ens ![Proc] "proc"
+      val artRec    = pRec.attr ![Artifact] "out"
+      val artRecVal = artRec.value
+      val specRec   = de.sciss.synth.io.AudioFile.readSpec(artRecVal)
+      val cueRec    = AudioCue.Obj(artRec, specRec, offset = 0L, gain = 1.0)
+      cueRec.name   = artRecVal.getName
+      folderUS.addLast(cueRec)
+
+      // invoke pd rendering
+      val fsc       = u.root ![FScape] "render-pd"
+      val aFsc      = fsc.attr
+      aFsc.put("audio-in", cueRec)
+      val locBase   = u.root ![ArtifactLocation] "base"
+      val fmtTab    = new java.text.SimpleDateFormat("'pd-'yyMMdd_HHmmss'.aif'", java.util.Locale.US)
+      val nameTab   = fmtTab.format(new java.util.Date)
+      val childTab  = new java.io.File("pd", nameTab).getPath
+      val artTab    = Artifact(locBase, Artifact.Child(childTab))
+      aFsc.put("table-out", artTab)
+      // XXX TODO: "calib-in"
+
+      // XXX TODO --- too much ceremony
+      val cfgFsc    = Control.Config()
+      import u.{cursor, workspace}
+      implicit val gtx: GenContext[S] = GenContext[S]
+      val r         = FScape.Rendering(fsc, cfgFsc)
     }
 
     a.name = "rec-done"
