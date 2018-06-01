@@ -18,12 +18,14 @@ import java.net.{InetSocketAddress, PortUnreachableException}
 import de.sciss.file._
 import de.sciss.lucre.stm
 import de.sciss.lucre.synth.{InMemory, Server, Txn}
+import de.sciss.mellite.Mellite
 import de.sciss.neuralgas.sphere.SphereGNG
 import de.sciss.osc
 import de.sciss.synth.Client
 import de.sciss.synth.proc.{AuralSystem, SoundProcesses}
 
 import scala.concurrent.{Future, Promise}
+import scala.swing.Swing
 
 object Koerper {
   final val numChannels = 5
@@ -56,7 +58,12 @@ object Koerper {
   final case class Config()
 
   def main(args: Array[String]): Unit = {
-    run(Config())
+//    run(Config())
+    Mellite.main(args)
+    Swing.onEDT {
+      de.sciss.koerper.lucre.SphereGNG.init()
+      de.sciss.koerper.lucre.SphereGNGObjView.init()
+    }
   }
 
   def run(config: Config): Unit = {

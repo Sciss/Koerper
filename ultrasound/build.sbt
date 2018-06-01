@@ -22,6 +22,7 @@ lazy val root = project.in(file("."))
       "de.sciss"          %  "kdtree"                   % deps.main.kdTree,
       "de.sciss"          %% "kollflitz"                % deps.main.kollflitz,
       "de.sciss"          %% "lucre-bdb"                % deps.main.lucre,
+      "de.sciss"          %% "mellite"                  % deps.main.mellite,
       "de.sciss"          %% "neuralgas-sphere"         % deps.main.neuralGas,
       "de.sciss"          %% "numbers"                  % deps.main.numbers,
       "de.sciss"          %% "scalaosc"                 % deps.main.scalaOSC,
@@ -42,6 +43,7 @@ lazy val deps = new {
     val kdTree            = "0.1.1"
     val kollflitz         = "0.2.2"
     val lucre             = "3.8.0"
+    val mellite           = "2.23.2"
     val neuralGas         = "2.3.2"
     val numbers           = "0.2.0"
     val scalaOSC          = "1.1.6"

@@ -58,6 +58,9 @@ object Session {
       val folderPD  = Folder[S]
       folderPD.name = NameFolderPD
       listB += folderPD
+      val sphere    = de.sciss.koerper.lucre.SphereGNG[S]
+      sphere.name   = "gng"
+      listB += sphere
       listB.result().foreach(folder.addLast)
     }
 
