@@ -20,16 +20,27 @@ import de.sciss.neuralgas.sphere.SphereGNG.Config
 import de.sciss.neuralgas.sphere.impl.{EdgeImpl, LocImpl, LocVarImpl, NodeImpl}
 import de.sciss.neuralgas.sphere.{Edge, Node}
 
+import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.concurrent.stm.{Ref, TArray, TMap}
 
 final class SphereGNGImpl {
   private[this] val loc         = new LocVarImpl
 
+//  // persisted
+//  private[this] var nodeIdCount = Ref(0)
+//  private[this] var numNodes    = Ref(0)
+//
+//  private[this] var nodes       = TArray.ofDim[NodeImpl](8192) // : Array[NodeImpl] = _
+//  private[this] val edgeMap     = TMap.empty[Int, List[EdgeImpl]]
+//
+
   // persisted
   private[this] var nodeIdCount = 0
   private[this] var numNodes    = 0
-  private[this] var nodes: Array[NodeImpl] = _
-  private[this] val edgeMap     = mutable.Map.empty[Int, mutable.Buffer[EdgeImpl]]
+
+  private[this] var nodes   : Array[NodeImpl] = _
+  private[this] val edgeMap     = mutable.Map.empty[Int, List[EdgeImpl]]
 
   // currently not persisted
   private[this] val rnd         = new scala.util.Random(0L) // (config.seed)
@@ -175,7 +186,8 @@ final class SphereGNGImpl {
     while (i < edgeMapSz) {
       val key = readInt()
       val numEdges = readInt()
-      val buf = mutable.Buffer.empty[EdgeImpl]
+//      val buf = mutable.Buffer.empty[EdgeImpl]
+      val buf = List.newBuilder[EdgeImpl]
       var j = 0
       while (j < numEdges) {
         val fromId  = readInt()
@@ -188,7 +200,7 @@ final class SphereGNGImpl {
         buf += e
         j += 1
       }
-      edgeMap += key -> buf
+      edgeMap += key -> buf.result()
       i += 1
     }
   }
@@ -375,11 +387,17 @@ final class SphereGNGImpl {
         from.addNeighbor(to  )
         to  .addNeighbor(from)
 
-        val bufFrom = edgeMap.getOrElseUpdate(from.id, mutable.Buffer.empty)
-        val bufTo   = edgeMap.getOrElseUpdate(to  .id, mutable.Buffer.empty)
+//        val bufFrom = edgeMap.getOrElseUpdate(from.id, mutable.Buffer.empty)
+//        val bufTo   = edgeMap.getOrElseUpdate(to  .id, mutable.Buffer.empty)
+//        bufFrom += e
+//        bufTo   += e
+        var bufFrom = edgeMap.getOrElse(from.id, Nil)
+        var bufTo   = edgeMap.getOrElse(to  .id, Nil)
         val e       = new EdgeImpl(from, to)
-        bufFrom += e
-        bufTo   += e
+        bufFrom ::= e
+        bufTo   ::= e
+        edgeMap.put(from.id, bufFrom)
+        edgeMap.put(to  .id, bufTo  )
 
         observer.gngEdgeInserted(e)
       }
@@ -447,20 +465,21 @@ final class SphereGNGImpl {
     observer.gngNodeRemoved(n)
   }
 
-  @inline
-  private def remove[A](xs: mutable.Buffer[A], elem: A): Unit =
-    xs.remove(xs.indexOf(elem))
+//  @inline
+//  private def remove[A](xs: mutable.Buffer[A], elem: A): Unit =
+//    xs.remove(xs.indexOf(elem))
 
-  //    private def remove[A](xs: List[A], elem: A): List[A] = {
-  //
-  //      @tailrec def loop(rem: List[A], res: List[A]): List[A] = rem match {
-  //        case `elem` :: tail => res.reverse ::: tail
-  //        case hd     :: tail => loop(tail, hd :: res)
-  //        case Nil            => res.reverse
-  //      }
-  //
-  //      loop(xs, Nil)
-  //    }
+  @inline
+  private def remove[A](xs: List[A], elem: A): List[A] = {
+
+    @tailrec def loop(rem: List[A], res: List[A]): List[A] = rem match {
+      case `elem` :: tail => res.reverse ::: tail
+      case hd     :: tail => loop(tail, hd :: res)
+      case Nil            => res.reverse
+    }
+
+    loop(xs, Nil)
+  }
 
   // takes care of removing neighbours as well
   private def deleteEdgeAndFire(e: EdgeImpl)(implicit config: Config): Unit = {

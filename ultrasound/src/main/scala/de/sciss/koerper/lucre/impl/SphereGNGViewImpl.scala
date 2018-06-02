@@ -15,7 +15,7 @@ import de.sciss.lucre.swing.impl.ComponentHolder
 import de.sciss.lucre.{stm, event => evt}
 import de.sciss.mellite.gui.GUI
 import de.sciss.neuralgas.sphere.SphereGNG.Config
-import de.sciss.neuralgas.sphere.{Edge, Loc, LocVar, Node, Observer, PD, Polar}
+import de.sciss.neuralgas.sphere.{Edge, Loc, LocVar, Node, Observer, PD}
 import de.sciss.osc
 import de.sciss.synth.proc.Workspace
 import javax.swing.JPanel
@@ -26,7 +26,6 @@ import org.jzy3d.plot3d.primitives.{LineStrip, Point}
 
 import scala.collection.mutable
 import scala.concurrent.stm.Ref
-import scala.math.{cos, sin}
 import scala.swing.event.ButtonClicked
 import scala.swing.{Component, Dimension, FlowPanel, ToggleButton}
 import scala.util.control.NonFatal
@@ -345,8 +344,16 @@ object SphereGNGViewImpl {
     private final class ChartObserver extends Observer {
       var redraw: Boolean = true
 
-      private[this] val nodeMap = mutable.Map.empty[Int , Point     ]
-      private[this] val edgeMap = mutable.Map.empty[Long, LineStrip ]
+      private final case class NodeData(theta: Double, phi: Double, pt: Point)
+//      private final case class EdgeData(theta2: Double, phi2: Double, lnStrip: LineStrip)
+
+      private final class LineStripVar(var ln: LineStrip)
+
+      private type EdgeData = Map[Int, LineStripVar]
+
+      private[this] val nodeMap     = mutable.Map.empty[Int, NodeData]
+//      private[this] val edgeMap = mutable.Map.empty[Long, EdgeData]
+      private[this] val edgeMap     = mutable.Map.empty[Int, EdgeData]
 
       private def ensureEDT(body: => Unit): Unit =
         if (EventQueue.isDispatchThread) body else EventQueue.invokeLater(() => body)
@@ -360,6 +367,8 @@ object SphereGNGViewImpl {
       }
 
       private def mkCoord(in: Loc): Coord3d = {
+        import Math._
+
         import in._
         val sinTheta  = sin(theta)
         val x         = sinTheta * cos(phi)
@@ -368,12 +377,59 @@ object SphereGNGViewImpl {
         new Coord3d(x, y, z)
       }
 
-      private def mkLineStrip(p1: Node, p2: Node): LineStrip = {
-        val numIntp = math.max(2, (Polar.centralAngle(p1, p2) * 18).toInt)
+      private def centralAngle(theta1: Double, phi1: Double, theta2: Double, phi2: Double): Double = {
+        import Math._
+        acos(cos(theta1) * cos(theta2) + sin(theta1) * sin(theta2) * cos(phi1 - phi2))
+      }
+
+      private def interpolate(theta1: Double, phi1: Double, theta2: Double, phi2: Double, d: Double, f: Double): Coord3d = {
+        import Math._
+        val PiH     = PI * 0.5
+//        val d       = centralAngle(n1, n2)
+//        val d = acos(cos(theta1) * cos(theta2) + sin(theta1) * sin(theta2) * cos(phi1 - phi2))
+
+        // http://edwilliams.org/avform.htm
+        val lat1    = PiH - theta1
+        val lon1    = phi1
+        val lat2    = PiH - theta2
+        val lon2    = phi2
+
+        val sinD    = sin(d)
+        val a       = sin((1 - f) * d) / sinD
+        val b       = sin( f      * d) / sinD
+        // todo: optimise to use cosTheta, sinTheta
+        val cosLat1 = cos(lat1)
+        val cosLon1 = cos(lon1)
+        val cosLat2 = cos(lat2)
+        val cosLon2 = cos(lon2)
+        val sinLat1 = sin(lat1)
+        val sinLon1 = sin(lon1)
+        val sinLat2 = sin(lat2)
+        val sinLon2 = sin(lon2)
+        val x       = a * cosLat1 * cosLon1 + b * cosLat2 * cosLon2
+        val y       = a * cosLat1 * sinLon1 + b * cosLat2 * sinLon2
+        val z       = a * sinLat1           + b * sinLat2
+//        val lat     = atan2(z, sqrt(x * x + y * y))
+//        val lon     = atan2(y, x)
+//
+//        val theta   = PiH - lat
+//        val phi     = lon
+//
+////        Polar(theta = theta, phi = phi)
+//        val sinTheta  = sin(theta)
+//        val x         = sinTheta * cos(phi)
+//        val y         = sinTheta * sin(phi)
+//        val z         = cos(theta)
+        new Coord3d(x, y, z)
+      }
+
+      private def mkLineStrip(theta1: Double, phi1: Double, theta2: Double, phi2: Double): LineStrip = {
+        val d = centralAngle(theta1, phi1, theta2, phi2)
+        val numIntp = math.max(2, (d * 18).toInt)
         val c = Vector.tabulate(numIntp) { i =>
           val f = i.toDouble / (numIntp - 1)
-          val p = Polar.interpolate(p1, p2, f)
-          mkCoord(p)
+          val p = interpolate(theta1, phi1, theta2, phi2, d, f)
+          p // mkCoord(p)
         }
 
         val ln = new LineStrip(c: _*)
@@ -381,34 +437,59 @@ object SphereGNGViewImpl {
         ln
       }
 
-      def gngNodeUpdated(n: Node): Unit = ensureEDT {
-        nodeMap.get(n.id).foreach { ptOld =>
-          _chart.removeDrawable(ptOld, false)
+      def gngNodeUpdated(n: Node): Unit = {
+        val nid     = n.id
+        val theta1  = n.theta
+        val phi1    = n.phi
+        val ptNew   = new Point(mkCoord(n), Color.RED, 3f)
+        ensureEDT {
+          nodeMap.get(nid).foreach { data =>
+            _chart.removeDrawable(data.pt, false)
+          }
+          nodeMap(nid) = NodeData(theta1, phi1, ptNew)
+          val edges = edgeMap.getOrElse(nid, Map.empty)
+          edges.iterator.foreach { case (thatId, lineVar) =>
+            nodeMap.get(thatId).foreach { nodeData =>
+              val theta2  = nodeData.theta
+              val phi2    = nodeData.phi
+              val lnNew   = mkLineStrip(theta1, phi1, theta2, phi2)
+              val lnOld   = lineVar.ln
+              lineVar.ln  = lnNew
+              if (lnOld != null) _chart.removeDrawable(lnOld, false)
+              _chart.add(lnNew, false)
+            }
+          }
+          _chart.add(ptNew, redraw)
+          //        setScale()
+          // log(s"gngNodeUpdated $ptOld -> $ptNew")
         }
-        val ptNew = new Point(mkCoord(n), Color.RED, 3f)
-        nodeMap(n.id) = ptNew
-        for (ni <- 0 until n.numNeighbors) {
-          val nb = n.neighbor(ni)
-          removeEdge(n, nb, redraw = false)
-          insertEdge(n, nb, redraw = false)
-        }
-        _chart.add(ptNew, redraw)
-        //        setScale()
-        // log(s"gngNodeUpdated $ptOld -> $ptNew")
       }
 
-      def gngNodeInserted(n: Node): Unit = ensureEDT {
+      def gngNodeInserted(n: Node): Unit = {
+        val nid   = n.id
+        val theta = n.theta
+        val phi   = n.phi
         val ptNew = new Point(mkCoord(n), Color.RED, 3f)
-        nodeMap(n.id) = ptNew
-        _chart.add(ptNew, redraw)
-        // log(s"gngNodeInserted $ptNew")
+        ensureEDT {
+          nodeMap(nid) = NodeData(theta, phi, ptNew)
+          _chart.add(ptNew, redraw)
+          // log(s"gngNodeInserted $ptNew")
+        }
       }
 
-      def gngNodeRemoved(n: Node): Unit = ensureEDT {
-        nodeMap.remove(n.id).foreach { ptOld =>
-          _chart.removeDrawable(ptOld, redraw)
+      def gngNodeRemoved(n: Node): Unit = {
+        val nid = n.id
+        ensureEDT {
+          edgeMap.get(nid).foreach { m =>
+            m.keysIterator.foreach { toId =>
+              removeEdge(nid, toId, redraw = false)
+            }
+          }
+          nodeMap.remove(nid).foreach { data =>
+            _chart.removeDrawable(data.pt, redraw)
+          }
+          // log(s"gngNodeRemoved $ptOld")
         }
-        // log(s"gngNodeRemoved $ptOld")
       }
 
       private def edgeId(from: Node, to: Node): Long = {
@@ -421,28 +502,61 @@ object SphereGNGViewImpl {
       // we do not visualise 'age'
       def gngEdgeUpdated(e: Edge): Unit = ()
 
-      def gngEdgeInserted(e: Edge): Unit = ensureEDT {
-        insertEdge(e.from, e.to, redraw = redraw)
-        // log(s"gngEdgeInserted(${e.from.id}, ${e.to.id})")
+      def gngEdgeInserted(e: Edge): Unit = {
+        val from    = e.from
+        val fromId  = from.id
+        val to      = e.to
+        val toId    = to  .id
+        val theta1  = from.theta
+        val phi1    = from.phi
+        val theta2  = to  .theta
+        val phi2    = to  .phi
+        ensureEDT {
+          insertEdge(fromId, toId, theta1, phi1, theta2, phi2, redraw = redraw)
+          // log(s"gngEdgeInserted(${e.from.id}, ${e.to.id})")
+        }
       }
 
-      def gngEdgeRemoved(e: Edge): Unit = ensureEDT {
-        removeEdge(e.from, e.to, redraw = redraw)
-        // log(s"gngEdgeRemoved(${e.from.id}, ${e.to.id})")
+      def gngEdgeRemoved(e: Edge): Unit = {
+        val from    = e.from
+        val fromId  = from.id
+        val to      = e.to
+        val toId    = to  .id
+        ensureEDT {
+          removeEdge(fromId, toId, redraw = redraw)
+          // log(s"gngEdgeRemoved(${e.from.id}, ${e.to.id})")
+        }
       }
 
-      private def insertEdge(from: Node, to: Node, redraw: Boolean): Unit = {
-        val lnNew = mkLineStrip(from, to)
-        val id = edgeId(from, to)
-        edgeMap(id) = lnNew
+      private def insertEdge(fromId: Int, toId: Int, theta1: Double, phi1: Double, theta2: Double, phi2: Double,
+                             redraw: Boolean): Unit = {
+        val lnNew = mkLineStrip(theta1, phi1, theta2, phi2)
+        val vr    = new LineStripVar(lnNew)
+        val m00   = edgeMap.getOrElse(fromId, Map.empty)
+        val m01   = m00 + (toId -> vr)
+        edgeMap(fromId) = m01
+        val m10   = edgeMap.getOrElse(toId  , Map.empty)
+        val m11   = m10 + (fromId -> vr)
+        edgeMap(toId  ) = m11
         _chart.add(lnNew, redraw)
       }
 
-      private def removeEdge(from: Node, to: Node, redraw: Boolean): Unit = {
-        val id = edgeId(from, to)
-        edgeMap.remove(id).foreach { lnOld =>
-          _chart.removeDrawable(lnOld, redraw)
+      private def removeEdge(fromId: Int, toId: Int, redraw: Boolean): Unit = {
+        val m00 = edgeMap.getOrElse(fromId, Map.empty)
+        m00.get(toId).foreach { lnVar =>
+          if (lnVar.ln != null) _chart.removeDrawable(lnVar.ln, redraw)
+          lnVar.ln == null
         }
+        val m01 = m00 - toId
+        edgeMap(fromId) = m01
+
+        val m10 = edgeMap.getOrElse(toId  , Map.empty)
+        m10.get(toId).foreach { lnVar =>
+          if (lnVar.ln != null) _chart.removeDrawable(lnVar.ln, redraw)
+          lnVar.ln == null
+        }
+        val m11 = m10 - fromId
+        edgeMap(toId  ) = m11
       }
     }
 
