@@ -82,13 +82,13 @@ object Session {
 //    a.put(SphereGNG.attrOscLocalHost, StringObj .newVar(Koerper.IpMacMini))
 //    a.put(SphereGNG.attrOscLocalPort, IntObj    .newVar(Koerper.OscPortDavid))
     a.put(SphereGNG.attrGngEpsilon      , DoubleObj .newVar(0.1))
-    a.put(SphereGNG.attrGngEpsilon2     , DoubleObj .newVar(0.001))
-    a.put(SphereGNG.attrGngBeta         , DoubleObj .newVar(0.0005))
+    a.put(SphereGNG.attrGngEpsilon2     , DoubleObj .newVar(0.05))   // 0.001
+    a.put(SphereGNG.attrGngBeta         , DoubleObj .newVar(0.001))  // 0.0005
     a.put(SphereGNG.attrGngAlpha        , DoubleObj .newVar(0.5))
     a.put(SphereGNG.attrGngLambda       , DoubleObj .newVar(1.0/50))
-    a.put(SphereGNG.attrGngUtility      , DoubleObj .newVar(20.0))
+    a.put(SphereGNG.attrGngUtility      , DoubleObj .newVar(15.0))  // 20.0
     a.put(SphereGNG.attrGngMaxNodes     , IntObj    .newVar(125))
-    a.put(SphereGNG.attrGngMaxEdgeAge   , IntObj    .newVar(1000))
+    a.put(SphereGNG.attrGngMaxEdgeAge   , IntObj    .newVar(100))   // 1000
     a.put(SphereGNG.attrGngMaxNeighbors , IntObj    .newVar(10))
 
     sphere.name = NameSphere

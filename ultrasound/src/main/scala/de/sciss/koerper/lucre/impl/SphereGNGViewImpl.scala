@@ -266,6 +266,16 @@ object SphereGNGViewImpl {
         val tableTheta  = buf(1)
         val tablePhi    = buf(2)
 
+        // integrate table -- this has been removed from FSc now
+        var i = 0
+        var sum = 0.0
+        while (i < sz0) {
+          val value = tableData(i)
+          sum += value
+          tableData(i) = sum.toFloat
+          i += 1
+        }
+
         val pd = new ProbDist(seed = 0L, tableData = tableData, tableTheta = tableTheta, tablePhi = tablePhi)
         pdRef() = pd
       }

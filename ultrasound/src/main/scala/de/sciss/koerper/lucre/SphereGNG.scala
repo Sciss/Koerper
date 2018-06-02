@@ -102,7 +102,7 @@ object SphereGNG extends Obj.Type {
   /** Value of type `DoubleObj`: maximum frequency of steps */
   final val attrGngThrottle = "gng-throttle"
 
-  final val DefaultThrottle = 100
+  final val DefaultThrottle = 50
 
   /** This excludes `attrTable` */
   val configAttr: Set[String] = Set(
