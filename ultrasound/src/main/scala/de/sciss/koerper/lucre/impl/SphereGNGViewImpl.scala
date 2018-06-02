@@ -4,6 +4,7 @@ package impl
 import java.awt.{BorderLayout, EventQueue}
 import java.net.InetSocketAddress
 import java.util
+import java.util.TimerTask
 
 import de.sciss.icons.raphael
 import de.sciss.koerper.Koerper
@@ -165,6 +166,22 @@ object SphereGNGViewImpl {
       }
     }
 
+    private[this] val timerRef = Ref(Option.empty[java.util.Timer])
+
+    private def startAlgorithm(): Unit = {
+      val t   = new java.util.Timer("run-gng")
+      val dly = math.max(1, (1000 / math.max(1, throttle)).toInt)
+      val tt  = new TimerTask {
+        def run(): Unit = algorithm.step()(gngCfg)
+      }
+      t.scheduleAtFixedRate(tt, dly /* 0L */, dly)
+      timerRef.single.swap(Some(t)).foreach(_.cancel())
+    }
+
+    private def stopAlgorithm(): Unit = {
+      timerRef.single.swap(None).foreach(_.cancel())
+    }
+
     def init(obj: SphereGNG[S])(implicit tx: S#Tx): this.type = {
       deferTx(guiInit())
       observer = obj.attr.changed.react { implicit tx => upd =>
@@ -185,11 +202,13 @@ object SphereGNGViewImpl {
     }
 
     private def guiInit(): Unit = {
+      algorithm.init(createTwo = false)(gngCfg)
+
       val ggPower = new ToggleButton {
         listenTo(this)
         reactions += {
           case ButtonClicked(_) =>
-//            val sel = selected
+            if (selected) startAlgorithm() else stopAlgorithm()
         }
       }
       val shpPower          = raphael.Shapes.Power _
@@ -326,10 +345,6 @@ object SphereGNGViewImpl {
     private final class ChartObserver extends Observer {
       var redraw: Boolean = true
 
-      private[this] var chart: AWTChart = _
-
-      ensureEDT(chart = impl._chart)
-
       private[this] val nodeMap = mutable.Map.empty[Int , Point     ]
       private[this] val edgeMap = mutable.Map.empty[Long, LineStrip ]
 
@@ -367,8 +382,9 @@ object SphereGNGViewImpl {
       }
 
       def gngNodeUpdated(n: Node): Unit = ensureEDT {
-        val ptOld = nodeMap(n.id)
-        chart.removeDrawable(ptOld, false)
+        nodeMap.get(n.id).foreach { ptOld =>
+          _chart.removeDrawable(ptOld, false)
+        }
         val ptNew = new Point(mkCoord(n), Color.RED, 3f)
         nodeMap(n.id) = ptNew
         for (ni <- 0 until n.numNeighbors) {
@@ -376,7 +392,7 @@ object SphereGNGViewImpl {
           removeEdge(n, nb, redraw = false)
           insertEdge(n, nb, redraw = false)
         }
-        chart.add(ptNew, redraw)
+        _chart.add(ptNew, redraw)
         //        setScale()
         // log(s"gngNodeUpdated $ptOld -> $ptNew")
       }
@@ -384,13 +400,14 @@ object SphereGNGViewImpl {
       def gngNodeInserted(n: Node): Unit = ensureEDT {
         val ptNew = new Point(mkCoord(n), Color.RED, 3f)
         nodeMap(n.id) = ptNew
-        chart.add(ptNew, redraw)
+        _chart.add(ptNew, redraw)
         // log(s"gngNodeInserted $ptNew")
       }
 
       def gngNodeRemoved(n: Node): Unit = ensureEDT {
-        val ptOld = nodeMap.remove(n.id).get
-        chart.removeDrawable(ptOld, redraw)
+        nodeMap.remove(n.id).foreach { ptOld =>
+          _chart.removeDrawable(ptOld, redraw)
+        }
         // log(s"gngNodeRemoved $ptOld")
       }
 
@@ -418,13 +435,14 @@ object SphereGNGViewImpl {
         val lnNew = mkLineStrip(from, to)
         val id = edgeId(from, to)
         edgeMap(id) = lnNew
-        chart.add(lnNew, redraw)
+        _chart.add(lnNew, redraw)
       }
 
       private def removeEdge(from: Node, to: Node, redraw: Boolean): Unit = {
         val id = edgeId(from, to)
-        val lnOld = edgeMap.remove(id).get
-        chart.removeDrawable(lnOld, redraw)
+        edgeMap.remove(id).foreach { lnOld =>
+          _chart.removeDrawable(lnOld, redraw)
+        }
       }
     }
 

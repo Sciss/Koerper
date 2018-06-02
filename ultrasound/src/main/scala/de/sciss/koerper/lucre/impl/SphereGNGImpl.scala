@@ -43,20 +43,25 @@ final class SphereGNGImpl {
 
   private final val SPHERE_COOKIE = 0x53474E47 // "SGNG"
 
-  def init()(implicit config: Config): Unit = {
+  def init(createTwo: Boolean)(implicit config: Config): this.type = {
     import config._
 //    _maxNodes = maxNodes0
     rnd.setSeed(seed)
     nodes = new Array(maxNodes0)
-    val n1 = mkRandomNode()
-    val n2 = mkRandomNode()
-    nodes(0) = n1
-    nodes(1) = n2
-    numNodes = 2
-    observer.gngNodeInserted(n1)
-    observer.gngNodeInserted(n2)
-    addEdgeAndFire(n1, n2)
+    if (createTwo) {
+      val n1 = mkRandomNode()
+      val n2 = mkRandomNode()
+      nodes(0) = n1
+      nodes(1) = n2
+      numNodes = 2
+      observer.gngNodeInserted(n1)
+      observer.gngNodeInserted(n2)
+      addEdgeAndFire(n1, n2)
+    } else {
+      numNodes = 0
+    }
     //      checkConsistency()
+    this
   }
 
   def saveState(f: File): Unit = {
@@ -201,9 +206,11 @@ final class SphereGNGImpl {
     res
   }
 
-  def step()(implicit config: Config): Unit = {
+  private[this] var stepCount = 0
+
+  def step()(implicit config: Config): Unit = synchronized {
     import config._
-    // stepCount += 1
+    stepCount += 1
     if (nodes.length < maxNodes0) {
       val _n = new Array[NodeImpl](maxNodes0)
       System.arraycopy(nodes, 0, _n, 0, numNodes)
@@ -261,43 +268,46 @@ final class SphereGNGImpl {
       i += 1
     }
 
-    val winner = minDistN // nodes(minDistIdx)
-    adaptNode(n = winner, n1 = winner, n2 = loc, d = winner.distance, f = epsilon)
-    winner.error    += minDist
-    winner.utility  += nextMinDist - minDist
-    observer.gngNodeUpdated(winner)
+    if (numNodes > 0) {
+      val winner = minDistN // nodes(minDistIdx)
+      adaptNode(n = winner, n1 = winner, n2 = loc, d = winner.distance, f = epsilon)
+      winner.error    += minDist
+      winner.utility  += nextMinDist - minDist
+      observer.gngNodeUpdated(winner)
 
-    val numNb = winner.numNeighbors
-    i = 0
-    while (i < numNb) {
-      val nb = winner.neighbor(i)
-      assert(nb != null)
-      adaptNode(n = nb, n1 = nb, n2 = loc, d = nb.distance, f = epsilon2)
-      observer.gngNodeUpdated(nb)
-      i += 1
+      val numNb = winner.numNeighbors
+      i = 0
+      while (i < numNb) {
+        val nb = winner.neighbor(i)
+        assert(nb != null)
+        adaptNode(n = nb, n1 = nb, n2 = loc, d = nb.distance, f = epsilon2)
+        observer.gngNodeUpdated(nb)
+        i += 1
+      }
+
+      // Connect two winning nodes
+      if (minDistN != nextMinDistN && nextMinDistN != null) addEdgeAndFire(minDistN, nextMinDistN)
+
+      // Calculate the age of the connected edges and delete too old edges
+      ageEdgesOfNodeAndFire(minDistN)
     }
-
-    // Connect two winning nodes
-    if (minDistN != nextMinDistN) addEdgeAndFire(minDistN, nextMinDistN)
-
-    // Calculate the age of the connected edges and delete too old edges
-    ageEdgesOfNodeAndFire(minDistN)
-
-    //      checkConsistency()
 
     // Insert and delete nodes
     if (rnd.nextDouble() < lambda && numNodes < maxNodes0) {
-      insertNodeBetweenAndFire(maxErrorN, maxErrorNeighbor(maxErrorN))
-      //        checkConsistency()
+      if (maxErrorN != null) {
+        insertNodeBetweenAndFire(maxErrorN, maxErrorNeighbor(maxErrorN))
+      } else {
+        val n         = mkRandomNode()
+        val numOld    = numNodes
+        nodes(numOld) = n
+        numNodes      = numOld + 1
+        observer.gngNodeInserted(n)
+      }
     }
 
     if ((numNodes > 2) && (numNodes > maxNodes0 || maxError > minUtility * utility)) {
-      //        deleteNode(minUtilityN)
       deleteNodeAndFire(minUtilityIdx)
-      //        checkConsistency()
     }
-
-    //      checkConsistency()
 
     // step += 1
   }
@@ -402,8 +412,11 @@ final class SphereGNGImpl {
 
   private def ageEdgesOfNodeAndFire(n: Node)(implicit config: Config): Unit = {
     import config._
-    val edges = edgeMap(n.id)
+    val edges = edgeMap.getOrElse(n.id, Nil)
     edges.foreach { e =>
+      if (e == null) {
+        println(s"WTF $stepCount")
+      }
       e.age += 1
       if (e.age <= config.maxEdgeAge) {
         observer.gngEdgeUpdated(e)
@@ -466,7 +479,7 @@ final class SphereGNGImpl {
   // allowed to call this when there _is_ no edge.
   private def deleteEdgeBetweenAndFire(from: Node, to: Node)(implicit config: Config): Unit = {
     val fromId  = from.id
-    val buf     = edgeMap(from.id)
+    val buf     = edgeMap.getOrElse(from.id, Nil)
     val eOpt    = buf.find(e => e.from.id == fromId || e.to.id == fromId)
     eOpt.foreach(deleteEdgeAndFire)
   }
