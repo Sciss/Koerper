@@ -5,6 +5,7 @@ import java.awt.{BorderLayout, EventQueue}
 import java.net.InetSocketAddress
 import java.util
 import java.util.TimerTask
+import java.util.concurrent.ConcurrentLinkedDeque
 
 import de.sciss.icons.raphael
 import de.sciss.koerper.Koerper
@@ -342,9 +343,7 @@ object SphereGNGViewImpl {
     }
 
     private final class ChartObserver extends Observer {
-      var redraw: Boolean = true
-
-      private final case class NodeData(theta: Double, phi: Double, pt: Point)
+      private final class NodeData(val theta: Double, val phi: Double, val pt: Point)
 //      private final case class EdgeData(theta2: Double, phi2: Double, lnStrip: LineStrip)
 
       private final class LineStripVar(var ln: LineStrip)
@@ -437,16 +436,43 @@ object SphereGNGViewImpl {
         ln
       }
 
+      private abstract class Cmd {
+        def execute(redraw: Boolean): Unit
+      }
+
+      private[this] val commands = new ConcurrentLinkedDeque[Cmd]()
+
+      private[this] object flush extends Runnable {
+        def run(): Unit = {
+          while ({
+            val cmd = commands.pollLast()
+            val ok  = cmd != null
+            if (ok) cmd.execute(redraw = commands.isEmpty)
+            ok
+          }) ()
+        }
+      }
+
+      private def push(cmd: Cmd): Unit = {
+        val refresh = commands.isEmpty
+        commands.push(cmd)
+        if (refresh) EventQueue.invokeLater(flush)
+      }
+
       def gngNodeUpdated(n: Node): Unit = {
         val nid     = n.id
         val theta1  = n.theta
         val phi1    = n.phi
         val ptNew   = new Point(mkCoord(n), Color.RED, 3f)
-        ensureEDT {
+        push(new CmdNodeUpdate(nid, theta1, phi1, ptNew))
+      }
+
+      private final class CmdNodeUpdate(nid: Int, theta1: Double, phi1: Double, ptNew: Point) extends Cmd {
+        def execute(redraw: Boolean): Unit = {
           nodeMap.get(nid).foreach { data =>
             _chart.removeDrawable(data.pt, false)
           }
-          nodeMap(nid) = NodeData(theta1, phi1, ptNew)
+          nodeMap(nid) = new NodeData(theta1, phi1, ptNew)
           val edges = edgeMap.getOrElse(nid, Map.empty)
           edges.iterator.foreach { case (thatId, lineVar) =>
             nodeMap.get(thatId).foreach { nodeData =>
@@ -470,16 +496,23 @@ object SphereGNGViewImpl {
         val theta = n.theta
         val phi   = n.phi
         val ptNew = new Point(mkCoord(n), Color.RED, 3f)
-        ensureEDT {
-          nodeMap(nid) = NodeData(theta, phi, ptNew)
+        push(new CmdNodeInsert(nid, theta, phi, ptNew))
+      }
+
+      private final class CmdNodeInsert(nid: Int, theta: Double, phi: Double, ptNew: Point) extends Cmd {
+        def execute(redraw: Boolean): Unit = {
+          nodeMap(nid) = new NodeData(theta, phi, ptNew)
           _chart.add(ptNew, redraw)
-          // log(s"gngNodeInserted $ptNew")
         }
       }
 
       def gngNodeRemoved(n: Node): Unit = {
         val nid = n.id
-        ensureEDT {
+        push(new CmdNodeRemove(nid))
+      }
+
+      private final class CmdNodeRemove(nid: Int) extends Cmd {
+        def execute(redraw: Boolean): Unit = {
           edgeMap.get(nid).foreach { m =>
             m.keysIterator.foreach { toId =>
               removeEdge(nid, toId, redraw = false)
@@ -488,15 +521,7 @@ object SphereGNGViewImpl {
           nodeMap.remove(nid).foreach { data =>
             _chart.removeDrawable(data.pt, redraw)
           }
-          // log(s"gngNodeRemoved $ptOld")
         }
-      }
-
-      private def edgeId(from: Node, to: Node): Long = {
-        val a = from.id
-        val b = to  .id
-        if (a < b) (a.toLong << 32) | (b.toLong & 0xFFFFFFFFL)
-        else       (b.toLong << 32) | (a.toLong & 0xFFFFFFFFL)
       }
 
       // we do not visualise 'age'
@@ -511,9 +536,22 @@ object SphereGNGViewImpl {
         val phi1    = from.phi
         val theta2  = to  .theta
         val phi2    = to  .phi
-        ensureEDT {
-          insertEdge(fromId, toId, theta1, phi1, theta2, phi2, redraw = redraw)
-          // log(s"gngEdgeInserted(${e.from.id}, ${e.to.id})")
+        push(new CmdEdgeInsert(fromId, toId, theta1, phi1, theta2, phi2))
+      }
+
+      private final class CmdEdgeInsert(fromId: Int, toId: Int, theta1: Double, phi1: Double, theta2: Double, phi2: Double)
+        extends Cmd {
+
+        def execute(redraw: Boolean): Unit = {
+          val lnNew = mkLineStrip(theta1, phi1, theta2, phi2)
+          val vr    = new LineStripVar(lnNew)
+          val m00   = edgeMap.getOrElse(fromId, Map.empty)
+          val m01   = m00 + (toId -> vr)
+          edgeMap(fromId) = m01
+          val m10   = edgeMap.getOrElse(toId  , Map.empty)
+          val m11   = m10 + (fromId -> vr)
+          edgeMap(toId  ) = m11
+          _chart.add(lnNew, redraw)
         }
       }
 
@@ -522,23 +560,12 @@ object SphereGNGViewImpl {
         val fromId  = from.id
         val to      = e.to
         val toId    = to  .id
-        ensureEDT {
-          removeEdge(fromId, toId, redraw = redraw)
-          // log(s"gngEdgeRemoved(${e.from.id}, ${e.to.id})")
-        }
+        push(new CmdEdgeRemove(fromId, toId))
       }
 
-      private def insertEdge(fromId: Int, toId: Int, theta1: Double, phi1: Double, theta2: Double, phi2: Double,
-                             redraw: Boolean): Unit = {
-        val lnNew = mkLineStrip(theta1, phi1, theta2, phi2)
-        val vr    = new LineStripVar(lnNew)
-        val m00   = edgeMap.getOrElse(fromId, Map.empty)
-        val m01   = m00 + (toId -> vr)
-        edgeMap(fromId) = m01
-        val m10   = edgeMap.getOrElse(toId  , Map.empty)
-        val m11   = m10 + (fromId -> vr)
-        edgeMap(toId  ) = m11
-        _chart.add(lnNew, redraw)
+      private final class CmdEdgeRemove(fromId: Int, toId: Int) extends Cmd {
+        def execute(redraw: Boolean): Unit =
+          removeEdge(fromId, toId, redraw = redraw)
       }
 
       private def removeEdge(fromId: Int, toId: Int, redraw: Boolean): Unit = {
