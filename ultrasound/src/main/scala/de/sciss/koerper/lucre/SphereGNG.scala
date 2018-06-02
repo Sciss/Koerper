@@ -99,6 +99,11 @@ object SphereGNG extends Obj.Type {
   /** Value of type `IntObj` */
   final val attrGngMaxNeighbors = "gng-max-neighbors"
 
+  /** Value of type `DoubleObj`: maximum frequency of steps */
+  final val attrGngThrottle = "gng-throttle"
+
+  final val DefaultThrottle = 100
+
   /** This excludes `attrTable` */
   val configAttr: Set[String] = Set(
     attrGngEpsilon    , attrGngEpsilon2 , attrGngBeta     , attrGngAlpha      ,

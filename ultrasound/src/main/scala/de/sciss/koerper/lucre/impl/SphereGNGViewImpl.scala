@@ -8,7 +8,7 @@ import java.util
 import de.sciss.icons.raphael
 import de.sciss.koerper.Koerper
 import de.sciss.lucre.expr.{DoubleObj, IntObj, StringObj}
-import de.sciss.lucre.stm.{Disposable, Obj, Sys}
+import de.sciss.lucre.stm.{Disposable, Obj, Sys, TxnLike}
 import de.sciss.lucre.swing.deferTx
 import de.sciss.lucre.swing.impl.ComponentHolder
 import de.sciss.lucre.{stm, event => evt}
@@ -24,9 +24,10 @@ import org.jzy3d.maths.{Coord3d, Scale}
 import org.jzy3d.plot3d.primitives.{LineStrip, Point}
 
 import scala.collection.mutable
+import scala.concurrent.stm.Ref
 import scala.math.{cos, sin}
 import scala.swing.event.ButtonClicked
-import scala.swing.{Component, Dimension, ToggleButton}
+import scala.swing.{Component, Dimension, FlowPanel, ToggleButton}
 import scala.util.control.NonFatal
 
 object SphereGNGViewImpl {
@@ -40,32 +41,69 @@ object SphereGNGViewImpl {
                                      transport: osc.Transport = osc.UDP)
 
   private final class Impl[S <: Sys[S]](implicit val cursor: stm.Cursor[S], val workspace: Workspace[S])
-    extends SphereGNGView[S] with ComponentHolder[Component] {
+    extends SphereGNGView[S] with ComponentHolder[Component] { impl =>
 
     private[this] var observer: Disposable[S#Tx] = _
     private[this] val algorithm = new SphereGNGImpl
 
-    private[this] var gngCfg: Config    = _
-    private[this] var oscCfg: OscConfig = _
-    private[this] var chart : AWTChart  = _
+    private[this] var gngCfg  : Config    = _
+    private[this] var oscCfg  : OscConfig = _
+    private[this] var throttle: Double    = _
+    private[this] var _chart  : AWTChart  = _
+
+    private[this] val runChart  = Ref(true  )
+    private[this] val runOsc    = Ref(false )
 
     private[this] val defaultGngCfg = Config()
     private[this] val defaultOscCfg = OscConfig()
 
-    private def mGngkConfig(map: evt.Map[S, String, Obj])(implicit tx: S#Tx): Unit = {
-      def getDouble(key: String, default: Double): Double = map.get(key) match {
+    private type EvtMap = evt.Map[S, String, Obj]
+
+    private def getDouble(key: String, default: Double)(implicit tx: S#Tx, map: EvtMap): Double =
+      map.get(key) match {
         case Some(v: DoubleObj[S])  => v.value
         case Some(v: IntObj   [S])  => v.value.toDouble
         case _                      => default
       }
 
-      def getInt(key: String, default: Int): Int =  map.get(key) match {
+    // accepts doubles as well
+    private def getIntD(key: String, default: Int)(implicit tx: S#Tx, map: EvtMap): Int =
+      map.get(key) match {
         case Some(v: IntObj   [S])  => v.value
         case Some(v: DoubleObj[S])  => v.value.toInt
         case _                      => default
       }
 
+    private def getInt(key: String, default: Int)(implicit tx: S#Tx, map: EvtMap): Int =
+      map.get(key) match {
+        case Some(v: IntObj[S]) => v.value
+        case _                  => default
+      }
+
+    private def getString(key: String, default: String)(implicit tx: S#Tx, map: EvtMap): String =
+      map.get(key) match {
+        case Some(v: StringObj[S])  => v.value
+        case _                      => default
+      }
+
+    private def mkGngConfig()(implicit tx: S#Tx, map: EvtMap): Unit = {
       import SphereGNG._
+      import TxnLike.peer
+
+      val _chart  = runChart()
+      val _osc    = runOsc  ()
+      val obs     = if (_chart && _osc) {
+        val obs1 = new OscObserver(???, ???)
+        val obs2 = new ChartObserver
+        new MultiObserver(obs1, obs2)
+      } else if (_chart) {
+        new ChartObserver
+      } else if (_osc) {
+        new OscObserver(???, ???)
+      } else {
+        Observer.Dummy
+      }
+
       val c = Config(
         epsilon       = getDouble(attrGngEpsilon      , defaultGngCfg.epsilon     ),
         epsilon2      = getDouble(attrGngEpsilon2     , defaultGngCfg.epsilon2    ),
@@ -73,40 +111,35 @@ object SphereGNGViewImpl {
         alpha         = getDouble(attrGngAlpha        , defaultGngCfg.alpha       ),
         lambda        = getDouble(attrGngLambda       , defaultGngCfg.lambda      ),
         utility       = getDouble(attrGngUtility      , defaultGngCfg.utility     ),
-        maxNodes0     = getInt   (attrGngMaxNodes     , defaultGngCfg.maxNodes0   ),
-        maxEdgeAge    = getInt   (attrGngMaxEdgeAge   , defaultGngCfg.maxEdgeAge  ),
-        maxNeighbors  = getInt   (attrGngMaxNeighbors , defaultGngCfg.maxNeighbors)
+        maxNodes0     = getIntD  (attrGngMaxNodes     , defaultGngCfg.maxNodes0   ),
+        maxEdgeAge    = getIntD  (attrGngMaxEdgeAge   , defaultGngCfg.maxEdgeAge  ),
+        maxNeighbors  = getIntD  (attrGngMaxNeighbors , defaultGngCfg.maxNeighbors),
+        observer      = obs
       )
 
       gngCfg = c
     }
 
+    private def mkThrottle()(implicit tx: S#Tx, map: EvtMap): Unit = {
+      throttle = getDouble(SphereGNG.attrGngThrottle, SphereGNG.DefaultThrottle)
+    }
+
     private def clearChart(): Unit = {
-      chart.clear()
-      chart.add(new Point(new Coord3d(-1, -1, -1), Color.WHITE, 0f))
-      chart.add(new Point(new Coord3d(+1, +1, +1), Color.WHITE, 0f))
+      _chart.clear()
+      _chart.add(new Point(new Coord3d(-1, -1, -1), Color.WHITE, 0f))
+      _chart.add(new Point(new Coord3d(+1, +1, +1), Color.WHITE, 0f))
       setChartScale()
     }
 
     private def setChartScale(): Unit = {
       val scaleN = new Scale(-1, +1)
-      val view = chart.getView
+      val view = _chart.getView
       view.setScaleX(scaleN)
       view.setScaleY(scaleN)
       view.setScaleZ(scaleN)
     }
 
-    private def mkOscConfig(map: evt.Map[S, String, Obj])(implicit tx: S#Tx): Unit = {
-      def getInt(key: String, default: Int): Int = map.get(key) match {
-        case Some(v: IntObj[S]) => v.value
-        case _                  => default
-      }
-
-      def getString(key: String, default: String): String = map.get(key) match {
-        case Some(v: StringObj[S])  => v.value
-        case _                      => default
-      }
-
+    private def mkOscConfig()(implicit tx: S#Tx, map: EvtMap): Unit = {
       import SphereGNG._
       val c = OscConfig(
         targetHost    = getString (attrOscTargetHost, defaultOscCfg.targetHost),
@@ -119,9 +152,17 @@ object SphereGNGViewImpl {
       oscCfg = c
     }
 
-    private def checkUpdate(map: evt.Map[S, String, Obj], key: String)(implicit tx: S#Tx): Unit = {
-      if      (SphereGNG.configAttr.contains(key)) mGngkConfig (map)
-      else if (SphereGNG.oscAttr   .contains(key)) mkOscConfig (map)
+    private def checkUpdate(map: EvtMap, key: String)(implicit tx: S#Tx): Unit = {
+      implicit val _map: EvtMap = map
+      if (SphereGNG.configAttr.contains(key)) {
+        mkGngConfig()
+      }
+      else if (SphereGNG.oscAttr.contains(key)) {
+        mkOscConfig()
+      }
+      else if (key == SphereGNG.attrGngThrottle) {
+        mkThrottle()
+      }
     }
 
     def init(obj: SphereGNG[S])(implicit tx: S#Tx): this.type = {
@@ -134,9 +175,12 @@ object SphereGNGViewImpl {
           case _ =>
         }
       }
-      val a = obj.attr
-      mGngkConfig(a)
-      mkOscConfig(a)
+
+      implicit val map: EvtMap = obj.attr
+      // important to make osc-config first!
+      mkOscConfig()
+      mkGngConfig()
+      mkThrottle()
       this
     }
 
@@ -145,38 +189,59 @@ object SphereGNGViewImpl {
         listenTo(this)
         reactions += {
           case ButtonClicked(_) =>
-            val sel = selected
-//            SoundProcesses.atomic[S, Unit] { implicit tx =>
-//              transport.stop()
-//              if (added.swap(false)(tx.peer)) objH.foreach(h => transport.removeObject(h()))
-//              transport.seek(0L)
-//              if (sel) {
-//                objH.foreach { h =>
-//                  transport.addObject(h())
-//                  added.set(true)(tx.peer)
-//                }
-//                transport.play()
-//              }
-//            } (transport.scheduler.cursor)
+//            val sel = selected
         }
       }
       val shpPower          = raphael.Shapes.Power _
       ggPower.icon          = GUI.iconNormal  (shpPower)
       ggPower.disabledIcon  = GUI.iconDisabled(shpPower)
-      ggPower.tooltip       = "Run/Pause Process"
+      ggPower.tooltip       = "Run/Pause Algorithm"
 
-      chart = new AWTChart()
+      val ggOsc = new ToggleButton {
+        listenTo(this)
+        reactions += {
+          case ButtonClicked(_) =>
+            impl.cursor.step { implicit tx =>
+              import TxnLike.{peer => _peer}
+              runOsc() = selected
+            }
+        }
+      }
+      val shpOsc          = raphael.Shapes.Ethernet _
+      ggOsc.icon          = GUI.iconNormal  (shpOsc)
+      ggOsc.disabledIcon  = GUI.iconDisabled(shpOsc)
+      ggOsc.tooltip       = "Run/Pause OSC Transmission"
+      
+      val ggChart = new ToggleButton {
+        listenTo(this)
+        reactions += {
+          case ButtonClicked(_) =>
+            impl.cursor.step { implicit tx =>
+              import TxnLike.{peer => _peer}
+              runChart() = selected
+            }
+        }
+      }
+      val shpChart          = raphael.Shapes.LineChart _
+      ggChart.icon          = GUI.iconNormal  (shpChart)
+      ggChart.disabledIcon  = GUI.iconDisabled(shpChart)
+      ggChart.tooltip       = "Run/Pause Chart Display"
+      ggChart.selected      = true
+      
+      val pBot = new FlowPanel(ggPower, ggOsc, ggChart)
+
+      _chart = new AWTChart()
       clearChart()
 
-      /* val mouse = */ ChartLauncher.configureControllers(chart, "SphereGNG", true, false)
-      chart.render()
+      /* val mouse = */ ChartLauncher.configureControllers(_chart, "SphereGNG", true, false)
+      _chart.render()
 //      ChartLauncher.frame(chart, bounds, title)
 
       val p = new JPanel(new BorderLayout())
-      val chartC = chart.getCanvas.asInstanceOf[java.awt.Component]
+      val chartC = _chart.getCanvas.asInstanceOf[java.awt.Component]
       chartC.setPreferredSize(new Dimension(480, 480))
       p.add(BorderLayout.CENTER , chartC)
-      p.add(BorderLayout.SOUTH  , ggPower.peer)
+      p.add(BorderLayout.SOUTH  , pBot.peer)
 
       component = Component.wrap(p)
     }
@@ -210,7 +275,7 @@ object SphereGNGViewImpl {
 
     // ---- sphere.Observer ----
 
-    private final class oscObserver(oscT: osc.Transmitter.Undirected.Net, target: InetSocketAddress)
+    private final class OscObserver(oscT: osc.Transmitter.Undirected.Net, target: InetSocketAddress)
       extends Observer {
 
       private def send(m: osc.Message): Unit = try {
@@ -258,8 +323,12 @@ object SphereGNGViewImpl {
       }
     }
 
-    private final class chartObserver(chart: AWTChart) extends Observer {
+    private final class ChartObserver extends Observer {
       var redraw: Boolean = true
+
+      private[this] var chart: AWTChart = _
+
+      ensureEDT(chart = impl._chart)
 
       private[this] val nodeMap = mutable.Map.empty[Int , Point     ]
       private[this] val edgeMap = mutable.Map.empty[Long, LineStrip ]
@@ -359,7 +428,7 @@ object SphereGNGViewImpl {
       }
     }
 
-    private final class multiObserver(a: Observer, b: Observer) extends Observer {
+    private final class MultiObserver(a: Observer, b: Observer) extends Observer {
       def gngNodeUpdated  (n: Node): Unit = { a.gngNodeUpdated  (n);  b.gngNodeUpdated  (n) }
       def gngEdgeUpdated  (e: Edge): Unit = { a.gngEdgeUpdated  (e);  b.gngEdgeUpdated  (e) }
       def gngNodeInserted (n: Node): Unit = { a.gngNodeInserted (n);  b.gngNodeInserted (n) }
