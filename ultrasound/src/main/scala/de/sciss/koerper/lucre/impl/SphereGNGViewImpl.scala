@@ -18,7 +18,8 @@ import de.sciss.mellite.gui.GUI
 import de.sciss.neuralgas.sphere.SphereGNG.Config
 import de.sciss.neuralgas.sphere.{Edge, Loc, LocVar, Node, Observer, PD}
 import de.sciss.osc
-import de.sciss.synth.proc.Workspace
+import de.sciss.synth.io.AudioFile
+import de.sciss.synth.proc.{AudioCue, Workspace}
 import javax.swing.JPanel
 import org.jzy3d.chart.{AWTChart, ChartLauncher}
 import org.jzy3d.colors.Color
@@ -26,9 +27,9 @@ import org.jzy3d.maths.{Coord3d, Scale}
 import org.jzy3d.plot3d.primitives.{LineStrip, Point}
 
 import scala.collection.mutable
-import scala.concurrent.stm.Ref
+import scala.concurrent.stm.{InTxn, Ref}
 import scala.swing.event.ButtonClicked
-import scala.swing.{Component, Dimension, FlowPanel, ToggleButton}
+import scala.swing.{Button, Component, Dimension, FlowPanel, ToggleButton}
 import scala.util.control.NonFatal
 
 object SphereGNGViewImpl {
@@ -47,9 +48,15 @@ object SphereGNGViewImpl {
     private[this] var observer: Disposable[S#Tx] = _
     private[this] val algorithm = new SphereGNGImpl
 
+    @volatile
     private[this] var gngCfg  : Config    = _
+
+    @volatile
     private[this] var oscCfg  : OscConfig = _
+
+    @volatile
     private[this] var throttle: Double    = _
+
     private[this] var _chart  : AWTChart  = _
 
     private[this] val runChart  = Ref(true  )
@@ -57,6 +64,10 @@ object SphereGNGViewImpl {
 
     private[this] val defaultGngCfg = Config()
     private[this] val defaultOscCfg = OscConfig()
+
+    private[this] val pdRef       = Ref[PD](PD.Uniform)
+    private[this] val oscRef      = Ref(Option.empty[OscObserver])
+    private[this] val oscDumpRef  = Ref(false)
 
     private type EvtMap = evt.Map[S, String, Obj]
 
@@ -87,23 +98,61 @@ object SphereGNGViewImpl {
         case _                      => default
       }
 
-    private def mkGngConfig()(implicit tx: S#Tx, map: EvtMap): Unit = {
-      import SphereGNG._
-      import TxnLike.peer
+    private def mkAndStoreOscObserver()(implicit tx: InTxn): OscObserver = {
+      disposeOscObserver()
+      val c       = oscCfg
+      val codec   = osc.PacketCodec().doublePrecision().build
+      val oscT    = if (c.transport == osc.UDP) {
+        val c1        = osc.UDP.Config()
+        c1.codec      = codec
+        c1.localPort  = c.localPort
+        if (!c.localHost.isEmpty) c1.localSocketAddress = new InetSocketAddress(c.localHost, c.localPort)
+        osc.UDP.Transmitter(c1)
+      } else {
+        val c1        = osc.TCP.Config()
+        c1.codec      = codec
+        c1.localPort  = c.localPort
+        if (!c.localHost.isEmpty) c1.localSocketAddress = new InetSocketAddress(c.localHost, c.localPort)
+        ??? // osc.TCP.Transmitter(c1)
+      }
+      oscT.connect()
+      if (oscDumpRef()) oscT.dump()
+      val target  = new InetSocketAddress(c.targetHost, c.targetPort)
+      val res     = new OscObserver(oscT, target)
+      oscRef()    = Some(res)
+      res
+    }
 
+    private def disposeOscObserver()(implicit tx: InTxn): Unit =
+      oscRef.swap(None).foreach(_.oscT.close())
+
+    private def dumpOsc(onOff: Boolean)(implicit tx: InTxn): Unit = {
+      oscRef().foreach(_.oscT.dump(if (onOff) osc.Dump.Text else osc.Dump.Off))
+      oscDumpRef() = onOff
+    }
+
+    private def mkObs()(implicit tx: InTxn): Observer = {
       val _chart  = runChart()
       val _osc    = runOsc  ()
       val obs     = if (_chart && _osc) {
-        val obs1 = new OscObserver(???, ???)
+        val obs1 = mkAndStoreOscObserver()
         val obs2 = new ChartObserver
         new MultiObserver(obs1, obs2)
       } else if (_chart) {
         new ChartObserver
       } else if (_osc) {
-        new OscObserver(???, ???)
+        mkAndStoreOscObserver()
       } else {
         Observer.Dummy
       }
+      obs
+    }
+
+    private def mkGngConfig()(implicit tx: S#Tx, map: EvtMap): Unit = {
+      import SphereGNG._
+      import TxnLike.peer
+
+      val _obs = mkObs()
 
       val c = Config(
         epsilon       = getDouble(attrGngEpsilon      , defaultGngCfg.epsilon     ),
@@ -115,9 +164,16 @@ object SphereGNGViewImpl {
         maxNodes0     = getIntD  (attrGngMaxNodes     , defaultGngCfg.maxNodes0   ),
         maxEdgeAge    = getIntD  (attrGngMaxEdgeAge   , defaultGngCfg.maxEdgeAge  ),
         maxNeighbors  = getIntD  (attrGngMaxNeighbors , defaultGngCfg.maxNeighbors),
-        observer      = obs
+        observer      = _obs,
+        pd            = pdRef()
       )
 
+      gngCfg = c
+    }
+
+    private def updateObs()(implicit tx: InTxn): Unit = {
+      val _obs  = mkObs()
+      val c     = gngCfg.copy(observer = _obs)
       gngCfg = c
     }
 
@@ -154,12 +210,19 @@ object SphereGNGViewImpl {
     }
 
     private def checkUpdate(map: EvtMap, key: String)(implicit tx: S#Tx): Unit = {
+      import TxnLike.peer
       implicit val _map: EvtMap = map
       if (SphereGNG.configAttr.contains(key)) {
         mkGngConfig()
       }
       else if (SphereGNG.oscAttr.contains(key)) {
         mkOscConfig()
+        if (runOsc()) mkGngConfig()
+      }
+      else if (key == SphereGNG.attrTable) {
+        if (updateCue()) {
+          mkGngConfig()
+        }
       }
       else if (key == SphereGNG.attrGngThrottle) {
         mkThrottle()
@@ -167,6 +230,8 @@ object SphereGNGViewImpl {
     }
 
     private[this] val timerRef = Ref(Option.empty[java.util.Timer])
+
+    private def isAlgorithmRunning: Boolean = timerRef.single.get.isDefined
 
     private def startAlgorithm(): Unit = {
       val t   = new java.util.Timer("run-gng")
@@ -182,6 +247,31 @@ object SphereGNGViewImpl {
       timerRef.single.swap(None).foreach(_.cancel())
     }
 
+    private def updateCue()(implicit tx: S#Tx, map: EvtMap): Boolean = {
+      import TxnLike.peer
+      val opt = map.$[AudioCue.Obj](SphereGNG.attrTable)
+      opt.foreach { cue =>
+        val cueV  = cue.value
+        val af    = AudioFile.openRead(cueV.artifact)
+        val sz0   = af.numFrames.toInt
+        val sz    = math.max(1, sz0)
+        val buf   = af.buffer(sz)
+        try {
+          af.read(buf, 0, sz0)
+        } finally {
+          af.close()
+        }
+
+        val tableData   = buf(0)
+        val tableTheta  = buf(1)
+        val tablePhi    = buf(2)
+
+        val pd = new ProbDist(seed = 0L, tableData = tableData, tableTheta = tableTheta, tablePhi = tablePhi)
+        pdRef() = pd
+      }
+      opt.isDefined
+    }
+
     def init(obj: SphereGNG[S])(implicit tx: S#Tx): this.type = {
       deferTx(guiInit())
       observer = obj.attr.changed.react { implicit tx => upd =>
@@ -194,6 +284,8 @@ object SphereGNGViewImpl {
       }
 
       implicit val map: EvtMap = obj.attr
+
+      updateCue()
       // important to make osc-config first!
       mkOscConfig()
       mkGngConfig()
@@ -220,10 +312,14 @@ object SphereGNGViewImpl {
         listenTo(this)
         reactions += {
           case ButtonClicked(_) =>
+            val r = isAlgorithmRunning
+            if (r) stopAlgorithm()
             impl.cursor.step { implicit tx =>
               import TxnLike.{peer => _peer}
               runOsc() = selected
+              updateObs()
             }
+            if (r) startAlgorithm()
         }
       }
       val shpOsc          = raphael.Shapes.Ethernet _
@@ -235,10 +331,14 @@ object SphereGNGViewImpl {
         listenTo(this)
         reactions += {
           case ButtonClicked(_) =>
+            val r = isAlgorithmRunning
+            if (r) stopAlgorithm()
             impl.cursor.step { implicit tx =>
               import TxnLike.{peer => _peer}
               runChart() = selected
+              updateObs()
             }
+            if (r) startAlgorithm()
         }
       }
       val shpChart          = raphael.Shapes.LineChart _
@@ -246,8 +346,24 @@ object SphereGNGViewImpl {
       ggChart.disabledIcon  = GUI.iconDisabled(shpChart)
       ggChart.tooltip       = "Run/Pause Chart Display"
       ggChart.selected      = true
-      
-      val pBot = new FlowPanel(ggPower, ggOsc, ggChart)
+
+      val ggDumpOsc = new ToggleButton("Dump OSC") {
+        listenTo(this)
+        reactions += {
+          case ButtonClicked(_) =>
+            impl.cursor.step { implicit tx =>
+              import TxnLike.{peer => _peer}
+              dumpOsc(selected)
+            }
+        }
+      }
+
+      val ggConsistency = Button("Consistency") {
+        val c = algorithm.checkConsistency()
+        println(c.pretty)
+      }
+
+      val pBot = new FlowPanel(ggPower, ggOsc, ggChart, ggConsistency, ggDumpOsc)
 
       _chart = new AWTChart()
       clearChart()
@@ -266,7 +382,13 @@ object SphereGNGViewImpl {
     }
 
     def dispose()(implicit tx: S#Tx): Unit = {
+      import TxnLike.peer
       observer.dispose()
+      stopAlgorithm()
+      disposeOscObserver()
+      deferTx {
+        _chart.dispose()
+      }
     }
 
     // ---- PD ----
@@ -274,11 +396,16 @@ object SphereGNGViewImpl {
     private final class ProbDist(seed: Long, tableData: Array[Float],
                                  tableTheta: Array[Float], tablePhi: Array[Float]) extends PD {
       private[this] val rnd = new util.Random(seed)
+      private[this] val sz  = tableData.length
+      private[this] val max = {
+        val x = tableData(sz - 1)
+        if (x > 0f) x else 0.1f
+      }
 
       def poll(loc: LocVar): Unit = {
-        val i0    = util.Arrays.binarySearch(tableData, 0, tableData.length, rnd.nextFloat())
+        val i0    = util.Arrays.binarySearch(tableData, 0, sz, rnd.nextFloat() * max)
         val i1    = if (i0 >= 0) i0 else -(i0 - 1)
-        val dot   = if (i1 < tableData.length) i1 else tableData.length - 1
+        val dot   = if (i1 < tableData.length) i1 else sz - 1
         val theta = tableTheta(dot)
         val phi   = tablePhi  (dot)
         if (theta == 0.0 && phi == 0.0) {
@@ -294,13 +421,14 @@ object SphereGNGViewImpl {
 
     // ---- sphere.Observer ----
 
-    private final class OscObserver(oscT: osc.Transmitter.Undirected.Net, target: InetSocketAddress)
+    private final class OscObserver(val oscT: osc.Transmitter.Undirected.Net, target: InetSocketAddress)
       extends Observer {
 
       private def send(m: osc.Message): Unit = try {
         oscT.send(m, target)
       } catch {
         case NonFatal(_) =>
+          Console.err.println("Dropped OSC message")
       }
 
       def gngNodeInserted(n: Node): Unit = {

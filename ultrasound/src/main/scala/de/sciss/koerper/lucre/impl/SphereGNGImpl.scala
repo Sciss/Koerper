@@ -22,7 +22,6 @@ import de.sciss.neuralgas.sphere.{Edge, Node}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.concurrent.stm.{Ref, TArray, TMap}
 
 final class SphereGNGImpl {
   private[this] val loc         = new LocVarImpl
@@ -220,6 +219,47 @@ final class SphereGNGImpl {
 
   private[this] var stepCount = 0
 
+  final class ConsistencyResult(val errors: List[String], val numNodes: Int, val numEdges: Int, val stepCount: Int) {
+    def pretty: String = {
+      val errS = if (errors.isEmpty) "Ok."
+      else errors.mkString("Inconsistencies:\n  ", "\n  ", "")
+      s"$errS\nnumNodes = $numNodes, numEdges = $numEdges, stepCount = $stepCount"
+    }
+  }
+
+  def checkConsistency(): ConsistencyResult = synchronized {
+    var errors = List.newBuilder[String]
+    if (numNodes < 0) errors += s"numNodes $numNodes is less than zero"
+    for (ni <- 0 until numNodes) {
+      val n = nodes(ni)
+      if (n == null) {
+        errors += s"Node at index $ni is null"
+      } else  for (j <- 0 until n.numNeighbors) {
+        val m = n.neighbor(j)
+        if (m == null) {
+          errors += s"Neighbor $j of node ${n.id} at index $ni is null"
+        } else {
+          if (!m.isNeighbor(n)) {
+            errors += s"Neighbor ${m.id} at neighbor index $j of node ${n.id} at index $ni is not detected as neighbor"
+          }
+          var k = 0
+          var ok = false
+          while (k < numNodes && !ok) {
+            if (nodes(k) == m) ok = true
+            k += 1
+          }
+          if (!ok) {
+            errors += s"Neighbor ${m.id} at neighbor index $j of node ${n.id} at index $ni is not in node list"
+          }
+
+          //        val ei = findEdge(ni, nj)
+          //        require (ei >= 0 && ei < numEdges)
+        }
+      }
+    }
+    new ConsistencyResult(errors.result(), numNodes = numNodes, numEdges = 0, stepCount = stepCount)
+  }
+
   def step()(implicit config: Config): Unit = synchronized {
     import config._
     stepCount += 1
@@ -245,7 +285,8 @@ final class SphereGNGImpl {
     val decay = 1.0 - config.beta
 
     var i = 0
-    while (i < numNodes) {
+    val _nn = numNodes
+    while (i < _nn) {
       val n = nodes(i)
 
       // Mark a node without neighbors for deletion
@@ -280,11 +321,12 @@ final class SphereGNGImpl {
       i += 1
     }
 
-    if (numNodes > 0) {
+    if (_nn > 0) {
       val winner = minDistN // nodes(minDistIdx)
       adaptNode(n = winner, n1 = winner, n2 = loc, d = winner.distance, f = epsilon)
-      winner.error    += minDist
-      winner.utility  += nextMinDist - minDist
+      winner.error += minDist
+      val dU = if (_nn > 1) nextMinDist - minDist else minDist
+      winner.utility += dU
       observer.gngNodeUpdated(winner)
 
       val numNb = winner.numNeighbors
@@ -305,7 +347,7 @@ final class SphereGNGImpl {
     }
 
     // Insert and delete nodes
-    if (rnd.nextDouble() < lambda && numNodes < maxNodes0) {
+    if (rnd.nextDouble() < lambda && _nn < maxNodes0) {
       if (maxErrorN != null) {
         insertNodeBetweenAndFire(maxErrorN, maxErrorNeighbor(maxErrorN))
       } else {
@@ -317,35 +359,13 @@ final class SphereGNGImpl {
       }
     }
 
-    if ((numNodes > 2) && (numNodes > maxNodes0 || maxError > minUtility * utility)) {
+    val _nn1 = numNodes
+    if (/* (_nn1 > 2) && */ (_nn1 > maxNodes0 || maxError > minUtility * utility)) {
       deleteNodeAndFire(minUtilityIdx)
     }
 
     // step += 1
   }
-
-  //    private def hasNaNs(n: Loc): Boolean =
-  //      n.theta.isNaN || n.phi.isNaN
-
-  //    @inline
-  //    private def checkConsistency(): Unit = ()
-
-  //    private def checkConsistency(): Unit = {
-  //      require (numNodes >= 0 && numEdges >= 0)
-  //      for (ni <- 0 until numNodes) {
-  //        val n = nodes(ni)
-  //        require (n != null)
-  //        for (j <- 0 until n.numNeighbors) {
-  //          val nj = n.neighbor(j)
-  //          require (nj >= 0 && nj < numNodes)
-  //          val m = nodes(nj)
-  //          require (m.isNeighbor(ni))
-  //
-  //          val ei = findEdge(ni, nj)
-  //          require (ei >= 0 && ei < numEdges)
-  //        }
-  //      }
-  //    }
 
   def nodeIterator: Iterator[Node] = nodes.iterator.take(numNodes)
   def edgeIterator: Iterator[Edge] = edgeMap.valuesIterator.flatMap { buf =>
@@ -460,7 +480,8 @@ final class SphereGNGImpl {
     nodes(ni)     = nodes(numNew)
     nodes(numNew) = null
 
-    edgeMap.remove(n.id)
+    val m = edgeMap.remove(n.id)
+    assert (m.forall(_.isEmpty))
 
     observer.gngNodeRemoved(n)
   }
@@ -471,7 +492,6 @@ final class SphereGNGImpl {
 
   @inline
   private def remove[A](xs: List[A], elem: A): List[A] = {
-
     @tailrec def loop(rem: List[A], res: List[A]): List[A] = rem match {
       case `elem` :: tail => res.reverse ::: tail
       case hd     :: tail => loop(tail, hd :: res)
@@ -479,6 +499,16 @@ final class SphereGNGImpl {
     }
 
     loop(xs, Nil)
+  }
+
+  private def removeEdge(id: Int, e: EdgeImpl): Boolean = {
+    @tailrec def loop(rem: List[EdgeImpl], res: List[EdgeImpl]): Boolean = rem match {
+      case `e` :: tail => edgeMap(id) = res.reverse ::: tail; true
+      case hd  :: tail => loop(tail, hd :: res)
+      case Nil         => false
+    }
+
+    loop(edgeMap(id), Nil)
   }
 
   // takes care of removing neighbours as well
@@ -489,8 +519,11 @@ final class SphereGNGImpl {
     to  .removeNeighbor(from)
     val fromId  = from.id
     val toId    = to  .id
-    remove(edgeMap(fromId), e)
-    remove(edgeMap(toId  ), e)
+//    remove(edgeMap(fromId), e)
+//    remove(edgeMap(toId  ), e)
+    assert (removeEdge(fromId, e))
+    assert (removeEdge(toId  , e))
+
     observer.gngEdgeRemoved(e)
   }
 
