@@ -1,5 +1,5 @@
 /*
- *  SphereGNGView.scala
+ *  EyeView.scala
  *  (Körper)
  *
  *  Copyright (c) 2018 Hanns Holger Rutz. All rights reserved.
@@ -18,9 +18,9 @@ import de.sciss.lucre.stm.Sys
 import de.sciss.mellite.gui.ViewHasWorkspace
 import de.sciss.synth.proc.Workspace
 
-object SphereGNGView {
-  def apply[S <: Sys[S]](obj: SphereGNG[S])(implicit tx: S#Tx, cursor: stm.Cursor[S],
-                                            workspace: Workspace[S]): SphereGNGView[S] = impl.SphereGNGViewImpl(obj)
+object EyeView {
+  def apply[S <: Sys[S]](obj: Eye[S])(implicit tx: S#Tx, cursor: stm.Cursor[S],
+                                      workspace: Workspace[S]): EyeView[S] = impl.EyeViewImpl(obj)
 }
-trait SphereGNGView[S <: Sys[S]] extends ViewHasWorkspace[S] {
+trait EyeView[S <: Sys[S]] extends ViewHasWorkspace[S] {
 }

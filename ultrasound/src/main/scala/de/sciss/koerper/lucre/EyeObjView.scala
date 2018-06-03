@@ -1,5 +1,5 @@
 /*
- *  SphereGNGObjView.scala
+ *  EyeObjView.scala
  *  (Körper)
  *
  *  Copyright (c) 2018 Hanns Holger Rutz. All rights reserved.
@@ -26,12 +26,12 @@ import de.sciss.mellite.gui.{AttrCellView, ListObjView, ObjView}
 import de.sciss.synth.proc.Workspace
 import javax.swing.Icon
 
-object SphereGNGObjView extends ListObjView.Factory {
-  type E[~ <: stm.Sys[~]] = SphereGNG[~]
-  val icon      : Icon      = ObjViewImpl.raphaelIcon(raphael.Shapes.Dribble)
-  val prefix    : String    = "SphereGNG"
+object EyeObjView extends ListObjView.Factory {
+  type E[~ <: stm.Sys[~]] = Eye[~]
+  val icon      : Icon      = ObjViewImpl.raphaelIcon(raphael.Shapes.View)
+  val prefix    : String    = "Eye"
   def humanName : String    = prefix
-  def tpe       : Obj.Type  = SphereGNG
+  def tpe       : Obj.Type  = Eye
   def category  : String    = ObjView.categComposition
 
   def hasMakeDialog = true
@@ -42,7 +42,7 @@ object SphereGNGObjView extends ListObjView.Factory {
     _init
   }
 
-  def mkListView[S <: Sys[S]](obj: SphereGNG[S])(implicit tx: S#Tx): SphereGNGObjView[S] with ListObjView[S] =
+  def mkListView[S <: Sys[S]](obj: Eye[S])(implicit tx: S#Tx): EyeObjView[S] with ListObjView[S] =
     new Impl(tx.newHandle(obj)).initAttrs(obj)
 
   final case class Config[S <: stm.Sys[S]](name: String)
@@ -60,12 +60,12 @@ object SphereGNGObjView extends ListObjView.Factory {
   }
 
   def makeObj[S <: Sys[S]](config: Config[S])(implicit tx: S#Tx): List[Obj[S]] = {
-    val obj = SphereGNG[S]
+    val obj = Eye[S]
     obj :: Nil
   }
 
-  final class Impl[S <: Sys[S]](val objH: stm.Source[S#Tx, SphereGNG[S]])
-    extends SphereGNGObjView[S]
+  final class Impl[S <: Sys[S]](val objH: stm.Source[S#Tx, Eye[S]])
+    extends EyeObjView[S]
       with ListObjView[S]
       with ObjViewImpl.Impl[S]
       with ListObjViewImpl.EmptyRenderer[S]
@@ -74,9 +74,9 @@ object SphereGNGObjView extends ListObjView.Factory {
 
     override def obj(implicit tx: S#Tx) = objH()
 
-    type E[~ <: stm.Sys[~]] = SphereGNG[~]
+    type E[~ <: stm.Sys[~]] = Eye[~]
 
-    def factory: ObjView.Factory = SphereGNGObjView
+    def factory: ObjView.Factory = EyeObjView
 
     def isViewable = true
 
@@ -84,7 +84,7 @@ object SphereGNGObjView extends ListObjView.Factory {
                 (implicit tx: S#Tx, workspace: Workspace[S], cursor: stm.Cursor[S]): Option[Window[S]] = {
       val _obj      = objH()
       val title     = AttrCellView.name(_obj)
-      val _view     = SphereGNGView(_obj)
+      val _view     = EyeView(_obj)
       val frame     = new WindowImpl[S](title) {
         val view: View[S] = _view
       }
@@ -93,7 +93,7 @@ object SphereGNGObjView extends ListObjView.Factory {
     }
   }
 }
-trait SphereGNGObjView[S <: stm.Sys[S]] extends ObjView[S] {
-  override def objH: stm.Source[S#Tx , SphereGNG[S]]
-  override def obj(implicit tx: S#Tx): SphereGNG[S]
+trait EyeObjView[S <: stm.Sys[S]] extends ObjView[S] {
+  override def objH: stm.Source[S#Tx , Eye[S]]
+  override def obj(implicit tx: S#Tx): Eye[S]
 }

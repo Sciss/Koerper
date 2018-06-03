@@ -4,7 +4,7 @@
  *
  *  Copyright (c) 2018 Hanns Holger Rutz. All rights reserved.
  *
- *  This software is published under the GNU General Public License v2+
+ *  This software is published under the GNU General Public License v3+
  *
  *
  *  For further information, please contact Hanns Holger Rutz at
@@ -12,6 +12,7 @@
  */
 
 package de.sciss.koerper
+package session
 
 import de.sciss.fscape.GE
 import de.sciss.fscape.lucre.{FScape, MacroImplicits}
@@ -161,7 +162,7 @@ object RenderProbabilityDistribution {
 
   private def mkDoneAction[S <: Sys[S]]()(implicit tx: S#Tx): Obj[S] = {
     val a = proc.Action.apply[S] { u =>
-      import de.sciss.fscape .lucre.FScape
+      import de.sciss.fscape.lucre.FScape
       import de.sciss.koerper.lucre.SphereGNG
 
       // store the chunk in the 'us' folder

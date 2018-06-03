@@ -4,7 +4,7 @@
  *
  *  Copyright (c) 2018 Hanns Holger Rutz. All rights reserved.
  *
- *  This software is published under the GNU General Public License v2+
+ *  This software is published under the GNU General Public License v3+
  *
  *
  *  For further information, please contact Hanns Holger Rutz at
@@ -360,7 +360,7 @@ final class SphereGNGImpl {
     }
 
     val _nn1 = numNodes
-    if (/* (_nn1 > 2) && */ (_nn1 > maxNodes0 || maxError > minUtility * utility)) {
+    if (/* (_nn1 > 2) && */ _nn1 > maxNodes0 || maxError > minUtility * utility) {
       deleteNodeAndFire(minUtilityIdx)
     }
 
@@ -490,16 +490,16 @@ final class SphereGNGImpl {
 //  private def remove[A](xs: mutable.Buffer[A], elem: A): Unit =
 //    xs.remove(xs.indexOf(elem))
 
-  @inline
-  private def remove[A](xs: List[A], elem: A): List[A] = {
-    @tailrec def loop(rem: List[A], res: List[A]): List[A] = rem match {
-      case `elem` :: tail => res.reverse ::: tail
-      case hd     :: tail => loop(tail, hd :: res)
-      case Nil            => res.reverse
-    }
-
-    loop(xs, Nil)
-  }
+//  @inline
+//  private def remove[A](xs: List[A], elem: A): List[A] = {
+//    @tailrec def loop(rem: List[A], res: List[A]): List[A] = rem match {
+//      case `elem` :: tail => res.reverse ::: tail
+//      case hd     :: tail => loop(tail, hd :: res)
+//      case Nil            => res.reverse
+//    }
+//
+//    loop(xs, Nil)
+//  }
 
   private def removeEdge(id: Int, e: EdgeImpl): Boolean = {
     @tailrec def loop(rem: List[EdgeImpl], res: List[EdgeImpl]): Boolean = rem match {

@@ -4,7 +4,7 @@
  *
  *  Copyright (c) 2018 Hanns Holger Rutz. All rights reserved.
  *
- *  This software is published under the GNU General Public License v2+
+ *  This software is published under the GNU General Public License v3+
  *
  *
  *  For further information, please contact Hanns Holger Rutz at
@@ -12,6 +12,7 @@
  */
 
 package de.sciss.koerper
+package session
 
 import de.sciss.file._
 import de.sciss.fscape.lucre.FScape
@@ -21,8 +22,8 @@ import de.sciss.lucre.expr.{BooleanObj, DoubleObj, IntObj, StringObj}
 import de.sciss.lucre.stm.Obj
 import de.sciss.lucre.stm.store.BerkeleyDB
 import de.sciss.osc
-import de.sciss.synth.proc.{Durable, Folder, SoundProcesses, Workspace}
 import de.sciss.synth.proc.Implicits._
+import de.sciss.synth.proc.{Durable, Folder, SoundProcesses, Workspace}
 
 object Session {
   type S = Durable

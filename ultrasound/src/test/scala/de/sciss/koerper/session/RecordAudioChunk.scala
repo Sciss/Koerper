@@ -4,7 +4,7 @@
  *
  *  Copyright (c) 2018 Hanns Holger Rutz. All rights reserved.
  *
- *  This software is published under the GNU General Public License v2+
+ *  This software is published under the GNU General Public License v3+
  *
  *
  *  For further information, please contact Hanns Holger Rutz at
@@ -12,6 +12,7 @@
  */
 
 package de.sciss.koerper
+package session
 
 import de.sciss.lucre.artifact.{Artifact, ArtifactLocation}
 import de.sciss.lucre.expr.{BooleanObj, DoubleObj, DoubleVector}
