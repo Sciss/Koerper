@@ -1,6 +1,6 @@
 lazy val commonSettings = Seq(
   name         := "Koerper-Ultrasound",
-  version      := "0.1.0",
+  version      := "0.1.1",
   description  := "An algorithmic art project (sound installation)",
   organization := "de.sciss",
   homepage     := Some(url(s"https://github.com/Sciss/${name.value}")),
