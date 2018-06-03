@@ -16,12 +16,13 @@ package de.sciss.koerper
 import de.sciss.fscape.GE
 import de.sciss.fscape.lucre.{FScape, MacroImplicits}
 import de.sciss.lucre.artifact.{Artifact, ArtifactLocation}
+import de.sciss.lucre.expr.BooleanObj
 import de.sciss.lucre.stm.Obj
 import de.sciss.lucre.synth.Sys
 import de.sciss.synth.proc
 import de.sciss.synth.proc.Implicits._
 import de.sciss.synth.proc.MacroImplicits._
-import de.sciss.synth.proc.{AudioCue, Ensemble, Folder, Proc}
+import de.sciss.synth.proc.{Action, AudioCue, Folder}
 
 object RenderProbabilityDistribution {
   final val KeyAudioIn    = "audio-in"
@@ -30,7 +31,7 @@ object RenderProbabilityDistribution {
   final val KeyCalibIn    = "calib-in"
   final val KeyTableOut   = "table-out"
 
-  final val ValueName     = "render-pd"
+  final val NameRender    = "render-pd"
 
   def mkObjects[S <: Sys[S]](config: Obj[S], locBase: ArtifactLocation[S])(implicit tx: S#Tx): List[Obj[S]] = {
     import MacroImplicits._
@@ -146,7 +147,7 @@ object RenderProbabilityDistribution {
     val aDone = mkDoneAction[S]()
     a.put("done", aDone)
 
-    f.name = ValueName
+    f.name = NameRender
 
     f :: Nil
   }
@@ -160,21 +161,30 @@ object RenderProbabilityDistribution {
 
   private def mkDoneAction[S <: Sys[S]]()(implicit tx: S#Tx): Obj[S] = {
     val a = proc.Action.apply[S] { u =>
-      import de.sciss.fscape.lucre.FScape
-      import de.sciss.fscape.stream.Control
-      import de.sciss.synth.proc.GenContext
+      import de.sciss.fscape .lucre.FScape
+      import de.sciss.koerper.lucre.SphereGNG
 
       // store the chunk in the 'us' folder
-      val folderPD  = u.root ![Folder] "pd"
-      val fsc       = u.root ![FScape] "render-pd"
-      val artTab    = fsc.attr ![Artifact] "table-out"
+      val folderPD  = u.root.![Folder]("pd")
+      val fsc       = u.root.![FScape]("render-pd")
+      val artTab    = fsc.attr.![Artifact]("table-out")
       val artTabVal = artTab.value
       val specTab   = de.sciss.synth.io.AudioFile.readSpec(artTabVal)
       val cueTab    = AudioCue.Obj(artTab, specTab, offset = 0L, gain = 1.0)
       cueTab.name   = artTabVal.getName
       folderPD.addLast(cueTab)
 
-      println("Yo Chuck!")
+      // set it as 'table' parameter for GNG
+      val sphere    = u.root.![SphereGNG]("sphere")
+      sphere.attr.put("table", cueTab)
+
+      println(s"[${new java.util.Date}] Körper: iteration done.")
+      val run       = u.root.![BooleanObj]("run").value
+      if (run) {
+        val iterate = u.root.![Action]("iterate")
+        import u._
+        iterate.execute(Action.Universe(iterate, workspace))
+      }
     }
 
     a.name = "pd-done"

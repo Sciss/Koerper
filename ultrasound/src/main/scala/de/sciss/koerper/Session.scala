@@ -13,10 +13,11 @@
 
 package de.sciss.koerper
 
+import de.sciss.file._
 import de.sciss.fscape.lucre.FScape
 import de.sciss.koerper.lucre.SphereGNG
 import de.sciss.lucre.artifact.ArtifactLocation
-import de.sciss.lucre.expr.{DoubleObj, IntObj, StringObj}
+import de.sciss.lucre.expr.{BooleanObj, DoubleObj, IntObj, StringObj}
 import de.sciss.lucre.stm.Obj
 import de.sciss.lucre.stm.store.BerkeleyDB
 import de.sciss.osc
@@ -26,10 +27,11 @@ import de.sciss.synth.proc.Implicits._
 object Session {
   type S = Durable
 
-  final val NameFolderUS  = "us"  // ultra-sound
-  final val NameFolderPD  = "pd"  // probability-distribution
-  final val NameLocBase   = "base"
-  final val NameSphere    = "sphere"
+  final val NameRun       = "run"     // BooleanObj: keep iterating
+  final val NameFolderUS  = "us"      // Folder: ultra-sound
+  final val NameFolderPD  = "pd"      // Folder: probability-distribution
+  final val NameLocBase   = "base"    // ArtifactLocation
+  final val NameSphere    = "sphere"  // SphereGNG
 
   def main(args: Array[String]): Unit = {
     SoundProcesses.init()
@@ -47,6 +49,10 @@ object Session {
     ws.cursor.step { implicit tx =>
       val folder    = ws.root
       val listB     = List.newBuilder[Obj[S]]
+
+      val runB      = BooleanObj.newVar[S](true)
+      runB.name     = NameRun
+      listB += runB
       val locBase   = ArtifactLocation.newVar[S](Koerper.auxDir)
       locBase.name  = NameLocBase
       listB += locBase
@@ -79,17 +85,23 @@ object Session {
     a.put(SphereGNG.attrOscTargetHost   , StringObj .newVar(Koerper.IpDavid))
     a.put(SphereGNG.attrOscTargetPort   , IntObj    .newVar(Koerper.OscPortDavid))
     a.put(SphereGNG.attrOscTransport    , StringObj .newVar(osc.UDP.name))
-//    a.put(SphereGNG.attrOscLocalHost, StringObj .newVar(Koerper.IpMacMini))
+    // cheesy test; we can't poll the IP because the machine
+    // might be on the wifi using DHCP.
+    val isMacMini = Koerper.auxDir.path.contains("Documents")
+    if (isMacMini) {
+      a.put(SphereGNG.attrOscLocalHost, StringObj .newVar(Koerper.IpMacMini))
+    }
 //    a.put(SphereGNG.attrOscLocalPort, IntObj    .newVar(Koerper.OscPortDavid))
     a.put(SphereGNG.attrGngEpsilon      , DoubleObj .newVar(0.1))
-    a.put(SphereGNG.attrGngEpsilon2     , DoubleObj .newVar(0.05))   // 0.001
-    a.put(SphereGNG.attrGngBeta         , DoubleObj .newVar(0.001))  // 0.0005
+    a.put(SphereGNG.attrGngEpsilon2     , DoubleObj .newVar(0.05))  // 0.001
+    a.put(SphereGNG.attrGngBeta         , DoubleObj .newVar(0.001)) // 0.0005
     a.put(SphereGNG.attrGngAlpha        , DoubleObj .newVar(0.5))
     a.put(SphereGNG.attrGngLambda       , DoubleObj .newVar(1.0/50))
     a.put(SphereGNG.attrGngUtility      , DoubleObj .newVar(15.0))  // 20.0
     a.put(SphereGNG.attrGngMaxNodes     , IntObj    .newVar(125))
     a.put(SphereGNG.attrGngMaxEdgeAge   , IntObj    .newVar(100))   // 1000
     a.put(SphereGNG.attrGngMaxNeighbors , IntObj    .newVar(10))
+    a.put(SphereGNG.attrGngThrottle     , IntObj    .newVar(50))
 
     sphere.name = NameSphere
     sphere

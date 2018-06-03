@@ -23,9 +23,10 @@ import de.sciss.synth.proc.MacroImplicits._
 import de.sciss.synth.proc.{AudioCue, Ensemble, Folder, Proc}
 
 object RecordAudioChunk {
-  final val KeyOut    = "out"
+  final val KeyOut      = "out"
 
-  final val ValueName = "rec-audio-chunk"
+  final val NameRec     = "rec-audio-chunk"
+  final val NameIterate = "iterate"
 
   def mkObjects[S <: Sys[S]]()(implicit tx: S#Tx): List[Obj[S]] = {
 
@@ -59,17 +60,18 @@ object RecordAudioChunk {
     f.addLast(p)
     val pl    = BooleanObj.newVar[S](false)
     val ens   = Ensemble(f, offset = 0L, playing = pl)
-    ens.name  = ValueName
+    ens.name  = NameRec
 
     aPrep :: ens :: Nil // List(aPrep, p, aDone)
   }
 
   private def mkPrepareAction[S <: Sys[S]]()(implicit tx: S#Tx): Obj[S] = {
     val a = proc.Action.apply[S] { u =>
-      val locBase = u.root ![ArtifactLocation] "base"
-      val ens     = u.root ![Ensemble] "rec-audio-chunk"
+      println(s"[${new java.util.Date}] Körper: iteration begin.")
+      val locBase = u.root.![ArtifactLocation]("base")
+      val ens     = u.root.![Ensemble]("rec-audio-chunk")
       ens.stop()
-      val pRec    = ens ![Proc] "proc"
+      val pRec    = ens.![Proc]("proc")
       // N.B. we have a race condition when using AIFF: the done action may see
       // the file before the header is flushed, thus reading numFrames == 0.
       // If we use IRCAM, the header does not carry numFrames information.
@@ -81,7 +83,7 @@ object RecordAudioChunk {
       ens.play()
     }
 
-    a.name = "rec-prepare"
+    a.name = NameIterate
     a
   }
 
@@ -92,11 +94,11 @@ object RecordAudioChunk {
       import de.sciss.synth.proc.GenContext
 
       // store the chunk in the 'us' folder
-      val folderUS  = u.root ![Folder] "us"
-      val ens       = u.root ![Ensemble] "rec-audio-chunk"
+      val folderUS  = u.root.![Folder]("us")
+      val ens       = u.root.![Ensemble]("rec-audio-chunk")
       ens.stop()
-      val pRec      = ens ![Proc] "proc"
-      val artRec    = pRec.attr ![Artifact] "out"
+      val pRec      = ens.![Proc]("proc")
+      val artRec    = pRec.attr.![Artifact]("out")
       val artRecVal = artRec.value
       val specRec   = de.sciss.synth.io.AudioFile.readSpec(artRecVal)
       val cueRec    = AudioCue.Obj(artRec, specRec, offset = 0L, gain = 1.0)
@@ -104,10 +106,10 @@ object RecordAudioChunk {
       folderUS.addLast(cueRec)
 
       // invoke pd rendering
-      val fsc       = u.root ![FScape] "render-pd"
+      val fsc       = u.root.![FScape]("render-pd")
       val aFsc      = fsc.attr
       aFsc.put("audio-in", cueRec)
-      val locBase   = u.root ![ArtifactLocation] "base"
+      val locBase   = u.root.![ArtifactLocation]("base")
       val fmtTab    = new java.text.SimpleDateFormat("'pd-'yyMMdd_HHmmss'.aif'", java.util.Locale.US)
       val nameTab   = fmtTab.format(new java.util.Date)
       val childTab  = new java.io.File("pd", nameTab).getPath
