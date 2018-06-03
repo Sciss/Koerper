@@ -58,5 +58,8 @@ object Eye extends Obj.Type {
 
   /** Value of type `AudioCue.Obj` */
   final val attrTable = "table"
+
+  /** In seconds. Value of type `DoubleObj` */
+  final val attrFadeTime = "fade-time"
 }
 trait Eye[S <: Sys[S]] extends Obj[S]
