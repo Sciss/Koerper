@@ -1,6 +1,6 @@
 lazy val commonSettings = Seq(
   name         := "Koerper-Ultrasound",
-  version      := "0.1.1",
+  version      := "0.1.2-SNAPSHOT",
   description  := "An algorithmic art project (sound installation)",
   organization := "de.sciss",
   homepage     := Some(url(s"https://github.com/Sciss/${name.value}")),
@@ -15,6 +15,7 @@ lazy val root = project.in(file("."))
   .settings(
 //    initialCommands in console := """import de.sciss.koerper.Geom._""",
     scalacOptions in (Compile, compile) += "-Yrangepos",  // this is needed to extract source code
+    resolvers += "Oracle Repository" at "http://download.oracle.com/maven", // required for sleepycat
     libraryDependencies ++= Seq(
       "de.sciss"          %% "fileutil"                 % deps.main.fileUtil,
       "de.sciss"          %% "fscape-macros"            % deps.main.fscape,
