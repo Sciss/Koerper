@@ -347,7 +347,9 @@ final class SphereGNGImpl {
     }
 
     // Insert and delete nodes
-    if (rnd.nextDouble() < lambda && _nn < maxNodes0) {
+    val coin = rnd.nextDouble()
+    val dang = coin < lambda
+    if (dang && _nn < maxNodes0) {
       if (maxErrorN != null) {
         insertNodeBetweenAndFire(maxErrorN, maxErrorNeighbor(maxErrorN))
       } else {
@@ -360,7 +362,7 @@ final class SphereGNGImpl {
     }
 
     val _nn1 = numNodes
-    if (/* (_nn1 > 2) && */ _nn1 > maxNodes0 || maxError > minUtility * utility) {
+    if (/* (_nn1 > 2) && */ (dang && _nn1 > maxNodes0) || maxError > minUtility * utility) {
       deleteNodeAndFire(minUtilityIdx)
     }
 

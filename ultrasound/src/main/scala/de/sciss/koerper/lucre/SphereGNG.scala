@@ -106,6 +106,12 @@ object SphereGNG extends Obj.Type {
   /** Value of type `IntObj` */
   final val attrGngMaxNodes = "gng-max-nodes"
 
+  /** Value of type `IntObj`. PD energy giving zero nodes */
+  final val attrGngMinEnergy = "gng-min-energy"
+
+  /** Value of type `IntObj`. PD energy giving max-nodes nodes */
+  final val attrGngMaxEnergy = "gng-max-energy"
+
   /** Value of type `IntObj` */
   final val attrGngMaxEdgeAge = "gng-max-edge-age"
 
@@ -121,7 +127,8 @@ object SphereGNG extends Obj.Type {
   val configAttr: Set[String] = Set(
     attrGngEpsilon    , attrGngEpsilon2 , attrGngBeta     , attrGngAlpha      ,
     attrGngLambda     , attrGngUtility  , attrGngMaxNodes , attrGngMaxEdgeAge ,
-    attrGngMaxNeighbors
+    attrGngMaxNeighbors,
+    attrGngMinEnergy, attrGngMaxEnergy
   )
 
   /** This excludes `attrTable` */

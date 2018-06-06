@@ -16,7 +16,6 @@ package impl
 
 import java.awt.{BorderLayout, EventQueue}
 import java.net.InetSocketAddress
-import java.util
 import java.util.TimerTask
 import java.util.concurrent.ConcurrentLinkedDeque
 
@@ -28,8 +27,9 @@ import de.sciss.lucre.swing.deferTx
 import de.sciss.lucre.swing.impl.ComponentHolder
 import de.sciss.lucre.{stm, event => evt}
 import de.sciss.mellite.gui.GUI
+import de.sciss.numbers
 import de.sciss.neuralgas.sphere.SphereGNG.Config
-import de.sciss.neuralgas.sphere.{Edge, Loc, LocVar, Node, Observer, PD}
+import de.sciss.neuralgas.sphere.{Edge, Loc, Node, Observer, PD}
 import de.sciss.osc
 import de.sciss.synth.io.AudioFile
 import de.sciss.synth.proc.{AudioCue, Workspace}
@@ -61,6 +61,7 @@ object SphereGNGViewImpl {
     private[this] var observer: Disposable[S#Tx] = _
     private[this] val algorithm = new SphereGNGImpl
 
+    @volatile
     @volatile
     private[this] var gngCfg  : Config    = _
 
@@ -165,7 +166,23 @@ object SphereGNGViewImpl {
       import SphereGNG._
       import TxnLike.peer
 
-      val _obs = mkObs()
+      val _obs  = mkObs()
+      val pd    = pdRef()
+
+      val maxNodes = pd match {
+        case _pd: ProbDist =>
+          val energy        = _pd.energy
+          val maxNodes0     = getIntD   (attrGngMaxNodes  , defaultGngCfg.maxNodes0)
+          val minEnergy     = getDouble (attrGngMinEnergy , 0.0)
+          val maxEnergy     = math.max(minEnergy + 1.0, getDouble (attrGngMaxEnergy, energy))
+          import numbers.Implicits._
+          energy.clip(minEnergy, maxEnergy).linLin(minEnergy, maxEnergy, 0.0, maxNodes0).round.toInt
+
+        case _ =>
+          getIntD   (attrGngMaxNodes  , defaultGngCfg.maxNodes0)
+      }
+
+      println(s"maxNodes = $maxNodes")
 
       val c = Config(
         epsilon       = getDouble(attrGngEpsilon      , defaultGngCfg.epsilon     ),
@@ -174,11 +191,11 @@ object SphereGNGViewImpl {
         alpha         = getDouble(attrGngAlpha        , defaultGngCfg.alpha       ),
         lambda        = getDouble(attrGngLambda       , defaultGngCfg.lambda      ),
         utility       = getDouble(attrGngUtility      , defaultGngCfg.utility     ),
-        maxNodes0     = getIntD  (attrGngMaxNodes     , defaultGngCfg.maxNodes0   ),
+        maxNodes0     = maxNodes, // getIntD  (attrGngMaxNodes     , defaultGngCfg.maxNodes0   ),
         maxEdgeAge    = getIntD  (attrGngMaxEdgeAge   , defaultGngCfg.maxEdgeAge  ),
         maxNeighbors  = getIntD  (attrGngMaxNeighbors , defaultGngCfg.maxNeighbors),
         observer      = _obs,
-        pd            = pdRef()
+        pd            = pd
       )
 
       gngCfg = c
@@ -289,7 +306,7 @@ object SphereGNGViewImpl {
           i += 1
         }
 
-        val pd = new ProbDist(seed = 0L, tableData = tableData, tableTheta = tableTheta, tablePhi = tablePhi)
+        val pd = ProbDist.mk(seed = 0L, tableData = tableData, tableTheta = tableTheta, tablePhi = tablePhi)
         pdRef() = pd
       }
       opt.isDefined
@@ -384,6 +401,13 @@ object SphereGNGViewImpl {
       val ggConsistency = Button("Consistency") {
         val c = algorithm.checkConsistency()
         println(c.pretty)
+        val energyInfo = pdRef.single.get match {
+          case pd: ProbDist =>
+            s"Energy: ${pd.energy}"
+          case _ =>
+            "(not ProbDist"
+        }
+        println(energyInfo)
       }
 
       val pBot = new FlowPanel(ggPower, ggOsc, ggChart, ggConsistency, ggDumpOsc)
@@ -411,34 +435,6 @@ object SphereGNGViewImpl {
       disposeOscObserver()
       deferTx {
         _chart.dispose()
-      }
-    }
-
-    // ---- PD ----
-
-    private final class ProbDist(seed: Long, tableData: Array[Float],
-                                 tableTheta: Array[Float], tablePhi: Array[Float]) extends PD {
-      private[this] val rnd = new util.Random(seed)
-      private[this] val sz  = tableData.length
-      private[this] val max = {
-        val x = tableData(sz - 1)
-        if (x > 0f) x else 0.1f
-      }
-
-      def poll(loc: LocVar): Unit = {
-        val i0    = util.Arrays.binarySearch(tableData, 0, sz, rnd.nextFloat() * max)
-        val i1    = if (i0 >= 0) i0 else -(i0 - 1)
-        val dot   = if (i1 < tableData.length) i1 else sz - 1
-        val theta = tableTheta(dot)
-        val phi   = tablePhi  (dot)
-        if (theta == 0.0 && phi == 0.0) {
-//          poll(loc)
-          PD.Uniform.poll(loc)
-        }
-        else {
-          loc.theta = theta
-          loc.phi   = phi
-        }
       }
     }
 

@@ -30,11 +30,13 @@ object Koerper {
 
   val auxDir: File = baseDir / "aux"
 
-  val IpDavid         = "192.168.0.21"
-  val IpMacMini       = "192.168.0.20"
-  val OscPortDavid    = 7771
-  val OscSocketDavid  = new InetSocketAddress(IpDavid, OscPortDavid)
-  val JackClientName  = "Koerper"
+  val IpDavid           = "192.168.0.21"
+  val IpMacMini         = "192.168.0.20"
+  val IpRaspiVideo      = "192.168.0.27"
+  val OscPortDavid      = 7771
+  val OscPortRaspiVideo = 57111
+  val OscSocketDavid    = new InetSocketAddress(IpDavid, OscPortDavid)
+  val JackClientName    = "Koerper"
 
   def VoronoiCoordFile(ch: Int): File = {
     require (ch >= 0 && ch < Koerper.numChannels)
@@ -60,31 +62,9 @@ object Koerper {
     }
   }
 
-//  def bootAudioSystem[S <: Sys[S]]()(implicit cursor: stm.Cursor[S]): Future[Unit] = {
-//    SoundProcesses.init()
-//
-//    val p  = Promise[Unit]()
-//    val as = AuralSystem()
-//
-//    val sCfg = Server.Config()
-//    sCfg.inputBusChannels   = Koerper.numChannels   // ultra-sound receivers
-//    sCfg.outputBusChannels  = Koerper.numChannels   // ultra-sound transmitters
-//    sCfg.deviceName         = Some(JackClientName)
-//    sCfg.sampleRate         = 96000
-//    sCfg.transport          = osc.TCP
-//    val cCfg = Client.Config()
-//    cCfg.executionContext   = SoundProcesses.executionContext
-//
-//    cursor.step { implicit tx =>
-//      as.addClient(new AuralSystem.Client {
-//        def auralStarted(s: Server)(implicit tx: Txn): Unit =
-//          tx.afterCommit(p.trySuccess(()))
-//
-//        def auralStopped()(implicit tx: Txn): Unit = ()
-//      })
-//      as.start(sCfg, cCfg)
-//    }
-//
-//    p.future
-//  }
+  def raspiDisableEnergySaving(): Unit = {
+    import sys.process._
+    Seq("xset", "s", "off").!
+    Seq("xset", "-dpms").!
+  }
 }

@@ -72,6 +72,10 @@ object ProbDist {
     }
   }
 
+  def mk(seed: Long, tableData: Array[Float],
+         tableTheta: Array[Float], tablePhi: Array[Float]): ProbDist =
+    new ProbDistImpl(seed = seed, tableData = tableData, tableTheta = tableTheta, tablePhi = tablePhi)
+
   private final class ProbDistImpl(seed: Long, tableData: Array[Float],
                        tableTheta: Array[Float], tablePhi: Array[Float]) extends ProbDist {
     private[this] val rnd = new util.Random(seed)

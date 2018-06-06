@@ -103,6 +103,8 @@ object Session {
     a.put(SphereGNG.attrGngMaxEdgeAge   , IntObj    .newVar(100))   // 1000
     a.put(SphereGNG.attrGngMaxNeighbors , IntObj    .newVar(10))
     a.put(SphereGNG.attrGngThrottle     , IntObj    .newVar(50))
+//    a.put(SphereGNG.attrGngMinEnergy    , DoubleObj .newVar(...))
+//    a.put(SphereGNG.attrGngMaxEnergy    , DoubleObj .newVar(...))
 
     sphere.name = NameSphere
     sphere
