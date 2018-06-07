@@ -14,6 +14,7 @@
 package de.sciss.koerper
 package session
 
+import de.sciss.file._
 import de.sciss.fscape.GE
 import de.sciss.fscape.lucre.{FScape, MacroImplicits}
 import de.sciss.koerper.lucre.OscNode
@@ -156,7 +157,15 @@ object RenderProbabilityDistribution {
     val osc   = OscNode[S]
     osc.name  = NameOsc
     val aO    = osc.attr
-    aO.put(OscNode.attrLocalHost  , StringObj .newVar(Koerper.IpMacMini         ))
+
+    val isMacMini = Koerper.auxDir.path.contains("Documents")
+    val localIp = if (isMacMini) {
+      Koerper.IpMacMini
+    } else {
+      Koerper.IpHH
+    }
+    aO.put(OscNode.attrLocalHost, StringObj .newVar(localIp))
+
     aO.put(OscNode.attrTargetHost , StringObj .newVar(Koerper.IpRaspiVideo      ))
     aO.put(OscNode.attrTargetPort , IntObj    .newVar(Koerper.OscPortRaspiVideo ))
 

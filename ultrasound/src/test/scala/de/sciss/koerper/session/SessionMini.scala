@@ -129,9 +129,13 @@ object SessionMini {
     // cheesy test; we can't poll the IP because the machine
     // might be on the wifi using DHCP.
     val isMacMini = Koerper.auxDir.path.contains("Documents")
-    if (isMacMini) {
-      a.put(SphereGNG.attrOscLocalHost, StringObj .newVar(Koerper.IpMacMini))
+    val localIp = if (isMacMini) {
+      Koerper.IpMacMini
+    } else {
+      Koerper.IpHH
     }
+    a.put(SphereGNG.attrOscLocalHost, StringObj .newVar(localIp))
+
 //    a.put(SphereGNG.attrOscLocalPort, IntObj    .newVar(Koerper.OscPortDavid))
     a.put(SphereGNG.attrGngEpsilon      , DoubleObj .newVar(0.1))
     a.put(SphereGNG.attrGngEpsilon2     , DoubleObj .newVar(0.05))  // 0.001

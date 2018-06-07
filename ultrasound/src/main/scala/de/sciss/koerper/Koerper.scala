@@ -39,6 +39,7 @@ object Koerper {
 
   val IpDavid           = "192.168.0.21"
   val IpMacMini         = "192.168.0.20"
+  val IpHH              = "192.168.0.77"
   val IpRaspiVideo      = "192.168.0.27"
   val OscPortDavid      = 7771
   val OscPortRaspiVideo = 57111
