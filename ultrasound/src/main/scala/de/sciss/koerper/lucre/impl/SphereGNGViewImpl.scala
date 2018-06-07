@@ -451,8 +451,9 @@ object SphereGNGViewImpl {
       def send(m: osc.Message): Unit = try {
         oscT.send(m, target)
       } catch {
-        case NonFatal(_) =>
-          Console.err.println("Dropped OSC message")
+        case NonFatal(ex) =>
+          Console.err.println(s"Dropped OSC message:")
+          ex.printStackTrace()
       }
 
       def gngNodeInserted(n: Node): Unit = {
