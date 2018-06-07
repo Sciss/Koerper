@@ -23,4 +23,9 @@ object EyeView {
                                       workspace: Workspace[S]): EyeView[S] = impl.EyeViewImpl(obj)
 }
 trait EyeView[S <: Sys[S]] extends ViewHasWorkspace[S] {
+//  def installFullScreenKey(frame: scala.swing.Window): Unit
+
+  def run(implicit tx: S#Tx): Boolean
+
+  def run_=(value: Boolean)(implicit tx: S#Tx): Unit
 }

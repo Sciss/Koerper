@@ -14,27 +14,25 @@
 package de.sciss.koerper.lucre
 package impl
 
+import java.awt.Color
+import java.awt.event.{ActionEvent, KeyEvent}
 import java.awt.image.BufferedImage
-import java.awt.{BorderLayout, Color}
 
-import de.sciss.icons.raphael
 import de.sciss.koerper.Koerper
 import de.sciss.lucre.stm.{Disposable, Obj, Sys, TxnLike}
 import de.sciss.lucre.swing.deferTx
 import de.sciss.lucre.swing.impl.ComponentHolder
 import de.sciss.lucre.{stm, event => evt}
-import de.sciss.mellite.gui.GUI
 import de.sciss.neuralgas.sphere.PD
 import de.sciss.neuralgas.sphere.impl.LocVarImpl
 import de.sciss.numbers.DoubleFunctions
 import de.sciss.osc
 import de.sciss.processor.Processor
 import de.sciss.synth.proc.{AudioCue, SoundProcesses, Workspace}
-import javax.swing.JPanel
+import javax.swing.{AbstractAction, JComponent, KeyStroke}
 
 import scala.concurrent.stm.{Ref, atomic}
-import scala.swing.event.ButtonClicked
-import scala.swing.{Component, Dimension, FlowPanel, Graphics2D, ToggleButton}
+import scala.swing.{Component, Dimension, Graphics2D}
 
 object EyeViewImpl {
   def apply[S <: Sys[S]](obj: Eye[S])(implicit tx: S#Tx, cursor: stm.Cursor[S],
@@ -68,6 +66,21 @@ object EyeViewImpl {
     private[this] val timerRef = Ref(Option.empty[javax.swing.Timer])
 
 //    private def isAlgorithmRunning: Boolean = timerRef.single.get.isDefined
+
+    private[this] val runState = Ref(false)
+
+    def run(implicit tx: S#Tx): Boolean = {
+      import TxnLike.peer
+      runState()
+    }
+
+    def run_=(value: Boolean)(implicit tx: S#Tx): Unit = {
+      import TxnLike.peer
+      val oldState = runState.swap(value)
+      if (oldState != value) deferTx {
+        if (value) startAlgorithm() else stopAlgorithm()
+      }
+    }
 
     private def startAlgorithm(): Unit = {
       val fps = 25.0
@@ -231,6 +244,8 @@ object EyeViewImpl {
 
     private final class C extends Component {
       preferredSize = new Dimension(EXT/2, EXT/2)
+//      background    = Color.black
+      opaque        = true
 
       override protected def paintComponent(g: Graphics2D): Unit = {
 //        super.paintComponent(g)
@@ -238,6 +253,7 @@ object EyeViewImpl {
         val p = peer
         val w = p.getWidth
         val h = p.getHeight
+        g.fillRect(0, 0, w, h)
         if (w < h) {
           val m = (h - w)/2
           g.drawImage(img, 0, m, w, w, p)
@@ -248,7 +264,7 @@ object EyeViewImpl {
       }
     }
 
-    private[this] final val EXT   = 1080
+    private[this] final val EXT   = 480 // 1080
     private[this] final val EXTM  = EXT - 1
 
     private def guiInit(): Unit = {
@@ -260,25 +276,45 @@ object EyeViewImpl {
       g.fillRect(0, 0, EXT, EXT)
       g.dispose()
 
-      val ggPower = new ToggleButton {
-        listenTo(this)
-        reactions += {
-          case ButtonClicked(_) =>
-            if (selected) startAlgorithm() else stopAlgorithm()
+      val c       = new C
+      val display = c.peer
+
+      val iMap    = display.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
+      val aMap    = display.getActionMap
+      val runName = "run"
+      iMap.put(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0), runName)
+      aMap.put(runName, new AbstractAction(runName) {
+        def actionPerformed(e: ActionEvent): Unit = {
+//          val _run = selected
+          impl.cursor.step { implicit tx =>
+            run = !run
+          }
         }
-      }
-      val shpPower          = raphael.Shapes.Power _
-      ggPower.icon          = GUI.iconNormal  (shpPower)
-      ggPower.disabledIcon  = GUI.iconDisabled(shpPower)
-      ggPower.tooltip       = "Run/Pause Algorithm"
+      })
 
-      val pBot = new FlowPanel(ggPower)
-
-      val p = new JPanel(new BorderLayout())
-      p.add(BorderLayout.CENTER , (new C).peer)
-      p.add(BorderLayout.SOUTH  , pBot.peer)
-
-      component = Component.wrap(p)
+//      val ggPower = new ToggleButton {
+//        listenTo(this)
+//        reactions += {
+//          case ButtonClicked(_) =>
+//            val _run = selected
+//            impl.cursor.step { implicit tx =>
+//              run = _run
+//            }
+//        }
+//      }
+//      val shpPower          = raphael.Shapes.Power _
+//      ggPower.icon          = GUI.iconNormal  (shpPower)
+//      ggPower.disabledIcon  = GUI.iconDisabled(shpPower)
+//      ggPower.tooltip       = "Run/Pause Algorithm"
+//
+//      val pBot = new FlowPanel(ggPower)
+//
+//      val p = new JPanel(new BorderLayout())
+//      p.add(BorderLayout.CENTER , (new C).peer)
+//      p.add(BorderLayout.SOUTH  , pBot.peer)
+//
+//      component = Component.wrap(p)
+      component = c
     }
 
     def dispose()(implicit tx: S#Tx): Unit = {

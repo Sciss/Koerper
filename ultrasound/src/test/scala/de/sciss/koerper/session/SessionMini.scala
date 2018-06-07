@@ -16,6 +16,7 @@ package session
 
 import de.sciss.file._
 import de.sciss.fscape.lucre.FScape
+import de.sciss.koerper.Koerper.auxDir
 import de.sciss.koerper.lucre.SphereGNG
 import de.sciss.lucre.artifact.ArtifactLocation
 import de.sciss.lucre.expr.{BooleanObj, DoubleObj, IntObj, StringObj}
@@ -25,7 +26,7 @@ import de.sciss.osc
 import de.sciss.synth.proc.Implicits._
 import de.sciss.synth.proc.{Durable, Folder, SoundProcesses, Workspace}
 
-object Session {
+object SessionMini {
   type S = Durable
 
   final val NameRun       = "run"     // BooleanObj: keep iterating
@@ -43,9 +44,11 @@ object Session {
     sys.exit()
   }
 
+  def WorkspaceDir: File = auxDir / "koerper-mini.mllt"
+
   def build(): Workspace[S] = {
-    val ds = BerkeleyDB     .factory(Koerper.WorkspaceDir)
-    val ws = Workspace.Durable.empty(Koerper.WorkspaceDir, ds)
+    val ds = BerkeleyDB     .factory(WorkspaceDir)
+    val ws = Workspace.Durable.empty(WorkspaceDir, ds)
 
     ws.cursor.step { implicit tx =>
       val folder    = ws.root

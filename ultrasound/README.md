@@ -8,6 +8,10 @@ To contact the author, send an email to `contact at sciss.de`.
 
 Builds with sbt against Scala 2.12.
 
+## sessions
+
+    sbt clean "test:runMain de.sciss.koerper.session.SessionPi"
+
 ## notes
 
 - Due to macro compilation units issues, the Mellite workspace creation code `Session` is in the test sources instead of main sources.

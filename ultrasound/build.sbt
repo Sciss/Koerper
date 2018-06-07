@@ -1,6 +1,13 @@
+lazy val baseName  = "Koerper-Ultraound"
+lazy val baseNameL = baseName.toLowerCase
+
+lazy val projectVersion = "0.1.2-SNAPSHOT"
+
+def appMainClass = Some("de.sciss.koerper.Koerper")
+
 lazy val commonSettings = Seq(
-  name         := "Koerper-Ultrasound",
-  version      := "0.1.2-SNAPSHOT",
+  name         := baseName,
+  version      := projectVersion,
   description  := "An algorithmic art project (sound installation)",
   organization := "de.sciss",
   homepage     := Some(url(s"https://github.com/Sciss/${name.value}")),
@@ -8,6 +15,22 @@ lazy val commonSettings = Seq(
   scalaVersion := "2.12.6",
   scalacOptions in (Compile, compile) ++= Seq("-deprecation", "-unchecked", "-feature", "-Xfuture", "-encoding", "utf8", "-Xlint"),
   fork in run  := true
+)
+
+lazy val assemblySettings = Seq(
+  // ---- assembly ----
+  test            in assembly := {},
+  mainClass       in assembly := appMainClass,
+  target          in assembly := baseDirectory.value,
+  assemblyJarName in assembly := s"$baseNameL.jar",
+  assemblyMergeStrategy in assembly := {
+    case "logback.xml" => MergeStrategy.last
+    case PathList("org", "xmlpull", _ @ _*)              => MergeStrategy.first
+    case PathList("org", "w3c", "dom", "events", _ @ _*) => MergeStrategy.first // bloody Apache Batik
+    case x =>
+      val old = (assemblyMergeStrategy in assembly).value
+      old(x)
+  }
 )
 
 lazy val root = project.in(file("."))
@@ -47,12 +70,12 @@ lazy val deps = new {
     val kdTree            = "0.1.1"
     val kollflitz         = "0.2.2"
     val lucre             = "3.8.0"
-    val mellite           = "2.23.3-SNAPSHOT"
+    val mellite           = "2.23.3"
     val neuralGas         = "2.3.2"
     val numbers           = "0.2.0"
     val scalaOSC          = "1.1.6"
     val scopt             = "3.7.0"
-    val soundProcesses    = "3.20.2-SNAPSHOT"
+    val soundProcesses    = "3.20.2"
     val swingPlus         = "0.3.0"
   }
 }
