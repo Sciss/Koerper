@@ -1,4 +1,4 @@
-lazy val baseName  = "Koerper-Ultraound"
+lazy val baseName  = "Koerper-Ultrasound"
 lazy val baseNameL = baseName.toLowerCase
 
 lazy val projectVersion = "0.1.2-SNAPSHOT"
@@ -35,6 +35,7 @@ lazy val assemblySettings = Seq(
 
 lazy val root = project.in(file("."))
   .settings(commonSettings)
+  .settings(assemblySettings)
   .settings(
 //    initialCommands in console := """import de.sciss.koerper.Geom._""",
     scalacOptions /* in (Compile, compile) */ += "-Yrangepos",  // this is needed to extract source code

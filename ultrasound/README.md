@@ -8,9 +8,17 @@ To contact the author, send an email to `contact at sciss.de`.
 
 Builds with sbt against Scala 2.12.
 
-## sessions
+## create workspace
 
     sbt clean "test:runMain de.sciss.koerper.session.SessionPi"
+
+## assembly
+
+    sbt clean assembly
+
+## run workspaces
+
+    java -jar koerper-ultrasound.jar --workspace /home/pi/Documents/projects/Koerper/aux/koerper-pi.mllt --start osc,eye
 
 ## notes
 

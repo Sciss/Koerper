@@ -98,7 +98,7 @@ object SessionPi {
     val a = proc.Action.apply[S] { u =>
       u.value match {
         case osc.Message("/pd", path: String) =>
-          println(s"PD PATH $path")
+//          println(s"PD PATH $path")
           val locBase = u.root.![ArtifactLocation]("base")
           val eye     = u.root.![de.sciss.koerper.lucre.Eye]("eye")
           val f       = new java.io.File(path)
@@ -112,14 +112,14 @@ object SessionPi {
           tx.afterCommit {
             import sys.process._
             println("SHUTDOWN")
-//            Seq("sudo", "shutdown", "now").run()
+            Seq("sudo", "shutdown", "now").run()
           }
 
         case osc.Message("/reboot"  ) =>
           tx.afterCommit {
             import sys.process._
             println("REBOOT")
-//            Seq("sudo", "reboot", "now").run()
+            Seq("sudo", "reboot", "now").run()
           }
 
         case other =>
