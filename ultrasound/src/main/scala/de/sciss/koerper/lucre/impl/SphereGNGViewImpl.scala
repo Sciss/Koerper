@@ -267,7 +267,12 @@ object SphereGNGViewImpl {
       val t   = new java.util.Timer("run-gng")
       val dly = math.max(1, (1000 / math.max(1, throttle)).toInt)
       val tt  = new TimerTask {
-        def run(): Unit = algorithm.step()(gngCfg)
+        def run(): Unit = {
+          algorithm.step()(gngCfg)
+          oscRef.single.get.foreach { oscObs =>
+            oscObs.send(osc.Message("/frame"))
+          }
+        }
       }
       t.scheduleAtFixedRate(tt, dly /* 0L */, dly)
       timerRef.single.swap(Some(t)).foreach(_.cancel())
@@ -443,7 +448,7 @@ object SphereGNGViewImpl {
     private final class OscObserver(val oscT: osc.Transmitter.Undirected.Net, target: InetSocketAddress)
       extends Observer {
 
-      private def send(m: osc.Message): Unit = try {
+      def send(m: osc.Message): Unit = try {
         oscT.send(m, target)
       } catch {
         case NonFatal(_) =>
