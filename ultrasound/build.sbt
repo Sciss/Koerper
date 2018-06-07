@@ -7,15 +7,18 @@ lazy val commonSettings = Seq(
   licenses     := Seq("gpl v3+" -> url("http://www.gnu.org/licenses/gpl-3.0.txt")),
   scalaVersion := "2.12.6",
   scalacOptions in (Compile, compile) ++= Seq("-deprecation", "-unchecked", "-feature", "-Xfuture", "-encoding", "utf8", "-Xlint"),
-  resolvers   += "jzv3d releases" at "http://maven.jzy3d.org/releases"
+  fork in run  := true
 )
 
 lazy val root = project.in(file("."))
   .settings(commonSettings)
   .settings(
 //    initialCommands in console := """import de.sciss.koerper.Geom._""",
-    scalacOptions in (Compile, compile) += "-Yrangepos",  // this is needed to extract source code
-    resolvers += "Oracle Repository" at "http://download.oracle.com/maven", // required for sleepycat
+    scalacOptions /* in (Compile, compile) */ += "-Yrangepos",  // this is needed to extract source code
+    resolvers ++= Seq(
+      "Oracle Repository" at "http://download.oracle.com/maven", // required for sleepycat
+      "jzv3d releases"    at "http://maven.jzy3d.org/releases"
+    ),
     libraryDependencies ++= Seq(
       "de.sciss"          %% "fileutil"                 % deps.main.fileUtil,
       "de.sciss"          %% "fscape-macros"            % deps.main.fscape,
@@ -44,12 +47,12 @@ lazy val deps = new {
     val kdTree            = "0.1.1"
     val kollflitz         = "0.2.2"
     val lucre             = "3.8.0"
-    val mellite           = "2.23.2"
+    val mellite           = "2.23.3-SNAPSHOT"
     val neuralGas         = "2.3.2"
     val numbers           = "0.2.0"
     val scalaOSC          = "1.1.6"
     val scopt             = "3.7.0"
-    val soundProcesses    = "3.20.1"
+    val soundProcesses    = "3.20.2-SNAPSHOT"
     val swingPlus         = "0.3.0"
   }
 }
