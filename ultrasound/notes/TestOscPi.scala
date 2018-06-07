@@ -11,5 +11,7 @@ val t = osc.UDP.Transmitter()
 val target = "192.168.0.27" -> 57111
 
 t.send(osc.Message("/pd", "/home/pi/Documents/projects/Koerper/aux/pd/pd-180603_104108.aif"), target)
+t.send(osc.Message("/pd", "/home/pi/Documents/projects/Koerper/aux/pd/pd-180603_104015.aif"), target)
 
 t.send(osc.Message("/reboot"), target)
+t.send(osc.Message("/shutdown"), target)

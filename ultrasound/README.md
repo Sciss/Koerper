@@ -11,6 +11,8 @@ Builds with sbt against Scala 2.12.
 ## create workspace
 
     sbt clean "test:runMain de.sciss.koerper.session.SessionPi"
+    
+    sbt clean "test:runMain de.sciss.koerper.session.SessionMini"
 
 ## assembly
 
@@ -19,6 +21,8 @@ Builds with sbt against Scala 2.12.
 ## run workspaces
 
     java -jar koerper-ultrasound.jar --workspace /home/pi/Documents/projects/Koerper/aux/koerper-pi.mllt --start osc,eye
+
+    java -jar koerper-ultrasound.jar --workspace /home/hhrutz/Documents/projects/Koerper/aux/koerper-mini.mllt --start stop,audio,iterate
 
 ## notes
 

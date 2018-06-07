@@ -29,7 +29,7 @@ object RecordAudioChunk {
   final val NameRec     = "rec-audio-chunk"
   final val NameIterate = "iterate"
 
-  def mkObjects[S <: Sys[S]]()(implicit tx: S#Tx): List[Obj[S]] = {
+  def mkObjects[S <: Sys[S]]()(implicit tx: S#Tx): (proc.Action[S], Ensemble[S]) = {
 
     import de.sciss.synth.proc.graph.Ops._
     import de.sciss.synth.proc.graph._
@@ -63,10 +63,10 @@ object RecordAudioChunk {
     val ens   = Ensemble(f, offset = 0L, playing = pl)
     ens.name  = NameRec
 
-    aPrep :: ens :: Nil // List(aPrep, p, aDone)
+    (aPrep, ens) // aPrep :: ens :: Nil // List(aPrep, p, aDone)
   }
 
-  private def mkPrepareAction[S <: Sys[S]]()(implicit tx: S#Tx): Obj[S] = {
+  private def mkPrepareAction[S <: Sys[S]]()(implicit tx: S#Tx): proc.Action[S] = {
     val a = proc.Action.apply[S] { u =>
       println(s"[${new java.util.Date}] Körper: iteration begin.")
       val locBase = u.root.![ArtifactLocation]("base")
@@ -95,7 +95,7 @@ object RecordAudioChunk {
       import de.sciss.synth.proc.GenContext
 
       // store the chunk in the 'us' folder
-      val folderUS  = u.root.![Folder]("us")
+//      val folderUS  = u.root.![Folder]("us")
       val ens       = u.root.![Ensemble]("rec-audio-chunk")
       ens.stop()
       val pRec      = ens.![Proc]("proc")
@@ -104,7 +104,7 @@ object RecordAudioChunk {
       val specRec   = de.sciss.synth.io.AudioFile.readSpec(artRecVal)
       val cueRec    = AudioCue.Obj(artRec, specRec, offset = 0L, gain = 1.0)
       cueRec.name   = artRecVal.getName
-      folderUS.addLast(cueRec)
+//      folderUS.addLast(cueRec)
 
       // invoke pd rendering
       val fsc       = u.root.![FScape]("render-pd")

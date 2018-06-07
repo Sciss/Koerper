@@ -160,9 +160,9 @@ object Koerper {
     ???
   }
 
-  def raspiDisableEnergySaving(): Unit = {
-    import sys.process._
-    Seq("xset", "s", "off").!
-    Seq("xset", "-dpms").!
-  }
+//  def raspiDisableEnergySaving(): Unit = {
+//    import sys.process._
+//    Seq("xset", "s", "off").!
+//    Seq("xset", "-dpms").!
+//  }
 }

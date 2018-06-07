@@ -50,7 +50,7 @@ object SessionPi {
     if (WorkspaceDir.exists()) {
       import sys.process._
       val backup = WorkspaceDir.replaceName("koerper-pi_OLD.mllt")
-      Seq("rm", "-r", backup.path).!
+      if (backup.exists()) Seq("rm", "-r", backup.path).!
       Seq("mv", WorkspaceDir.path, backup.path).!
     }
     val ds = BerkeleyDB     .factory(WorkspaceDir)
