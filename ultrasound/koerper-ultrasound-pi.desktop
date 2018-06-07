@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Koerper-Ultrasound
+Type=Application
+Terminal=true
+Exec=/home/pi/Documents/devel/Koerper/ultrasound/run-pi.sh
+
