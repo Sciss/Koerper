@@ -199,14 +199,21 @@ object RenderProbabilityDistribution {
         val remoteBase  = "/home/pi/Documents/projects/Koerper/aux/pd/"
         val remotePath  = s"$remoteBase${artTabVal.getName}"
         val cmd = Seq("scp", artTabVal.getPath, s"$remoteUser@$remoteIP:$remoteBase")
-        val code = cmd.!
-        if (code == 0) {
-          val oscNode = u.root.![OscNode]("osc")
-          import u._
-          oscNode.!(osc.Message("/pd", remotePath))
+        val oscNode = u.root.![OscNode]("osc")
+        tx.afterCommit {
+          import de.sciss.synth.proc.SoundProcesses.executionContext
+          val codeFut = scala.concurrent.Future(cmd.!)
+          codeFut.foreach { code =>
+            if (code == 0) {
+              import u._
+              cursor.step { implicit tx =>
+                oscNode.!(osc.Message("/pd", remotePath))
+              }
 
-        } else {
-          Console.err.println(s"scp failed for $artTabVal")
+            } else {
+              Console.err.println(s"scp failed for $artTabVal")
+            }
+          }
         }
       }
 
