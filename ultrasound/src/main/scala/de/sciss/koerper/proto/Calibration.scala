@@ -22,8 +22,27 @@ import de.sciss.numbers.Implicits._
 import de.sciss.synth.io.{AudioFile, AudioFileSpec}
 
 object Calibration {
+  case class RunConfig(fIn: File = file("in.aif"), fOut: File = file("out.aif"))
+
   def main(args: Array[String]): Unit = {
-//     run(Config())
+    val default = RunConfig()
+
+    val p = new scopt.OptionParser[RunConfig]("Calibration") {
+      opt[File]('i', "input")
+        .required()
+        .text("US recording input file")
+        .action { (f, c) => c.copy(fIn = f) }
+
+      opt[File]('o', "output")
+        .required()
+        .text("Calibration output 'sound' file")
+        .action { (f, c) => c.copy(fOut = f) }
+    }
+    p.parse(args, default).fold(sys.exit(1)) { c =>
+      run(fIn = c.fIn, fOut = c.fOut, config = ConstQConfig())
+    }
+
+    //     run(Config())
 //    testRead()
     testApply(ConstQConfig())
   }
@@ -143,22 +162,22 @@ object Calibration {
     }
   }
 
-  def run(config: ConstQConfig): Unit = {
+  def run(fIn: File, fOut: File, config: ConstQConfig): Unit = {
     import config._
-    val fIn       = file("/data/temp/us-180512-calib-continuous-motu.aif")
+//    val fIn       = file("/data/temp/us-180512-calib-continuous-motu.aif")
     val specIn    = AudioFile.readSpec(fIn)
     require (specIn.sampleRate == sr)
-    val fOut      = file("/data/temp/test-calib.aif")
+//    val fOut      = file("/data/temp/test-calib.aif")
 //    val numWin    = calcNumWin(specIn.numFrames, config)
 
     val g = Graph {
       import graph._
-      val in        = AudioFileIn(file = fIn, numChannels = 1) * gainIn
+      val in        = AudioFileIn(file = fIn, numChannels = specIn.numChannels) * gainIn
       val constQ    = analyze(in, config)
       val norm      = constQ.sqrt // / dbMax.dbAmp
       val median    = SlidingWindowPercentile(norm, winSize = numBands, medianLen = 63,  frac = 0.9)
       val max       = RunningWindowMax(median, size = numBands).takeRight(numBands)
-      AudioFileOut(fOut, AudioFileSpec(numChannels = 1, sampleRate = sr), in = max) // sr doesn't matter
+      AudioFileOut(fOut, AudioFileSpec(numChannels = specIn.numChannels, sampleRate = sr), in = max) // sr doesn't matter
     }
 
     val ctrl = Control()

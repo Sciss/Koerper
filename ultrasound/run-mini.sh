@@ -6,7 +6,7 @@ echo "Koerper-Ultrasound"
 echo "- starting QJackCtl attempt1"
 sleep 2
 qjackctl &
-sleep 8
+sleep 14
 killall qjackctl
 killall jackd
 sleep 1
