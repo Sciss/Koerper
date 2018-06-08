@@ -14,12 +14,11 @@
 package de.sciss.koerper
 package session
 
-import de.sciss.file._
 import de.sciss.fscape.GE
 import de.sciss.fscape.lucre.{FScape, MacroImplicits}
 import de.sciss.koerper.lucre.OscNode
 import de.sciss.lucre.artifact.{Artifact, ArtifactLocation}
-import de.sciss.lucre.expr.{BooleanObj, IntObj, StringObj}
+import de.sciss.lucre.expr.BooleanObj
 import de.sciss.lucre.stm.Obj
 import de.sciss.lucre.synth.Sys
 import de.sciss.osc
@@ -36,9 +35,9 @@ object RenderProbabilityDistribution {
   final val KeyTableOut   = "table-out"
 
   final val NameRender    = "render-pd"
-  final val NameOsc       = "osc"
 
-  def mkObjects[S <: Sys[S]](config: Obj[S], locBase: ArtifactLocation[S])(implicit tx: S#Tx): List[Obj[S]] = {
+  def mkObjects[S <: Sys[S]](config: Obj[S], locBase: ArtifactLocation[S], osc: OscNode[S])
+                            (implicit tx: S#Tx): List[Obj[S]] = {
     import MacroImplicits._
     import de.sciss.fscape.graph.{AudioFileIn => _, AudioFileOut => _, _}
     import de.sciss.fscape.lucre.graph.Ops._
@@ -154,22 +153,7 @@ object RenderProbabilityDistribution {
 
     f.name = NameRender
 
-    val osc   = OscNode[S]
-    osc.name  = NameOsc
-    val aO    = osc.attr
-
-    val isMacMini = Koerper.auxDir.path.contains("Documents")
-    val localIp = if (isMacMini) {
-      Koerper.IpMacMini
-    } else {
-      Koerper.IpHH
-    }
-    aO.put(OscNode.attrLocalHost, StringObj .newVar(localIp))
-
-    aO.put(OscNode.attrTargetHost , StringObj .newVar(Koerper.IpRaspiVideo      ))
-    aO.put(OscNode.attrTargetPort , IntObj    .newVar(Koerper.OscPortRaspiVideo ))
-
-    f :: osc :: Nil
+    f :: Nil
   }
 
   private def mkCue[S <: Sys[S]](a: Artifact[S])(implicit tx: S#Tx): AudioCue.Obj[S] = {

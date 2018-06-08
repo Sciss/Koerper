@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Koerper-Ultrasound
+Type=Application
+Terminal=true
+Exec=/home/hhrutz/Documents/devel/Koerper/ultrasound/run-mini.sh
+

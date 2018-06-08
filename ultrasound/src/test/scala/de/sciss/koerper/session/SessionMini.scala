@@ -17,7 +17,7 @@ package session
 import de.sciss.file._
 import de.sciss.fscape.lucre.FScape
 import de.sciss.koerper.Koerper.auxDir
-import de.sciss.koerper.lucre.SphereGNG
+import de.sciss.koerper.lucre.{OscNode, SphereGNG}
 import de.sciss.lucre.artifact.ArtifactLocation
 import de.sciss.lucre.expr.{BooleanObj, DoubleObj, IntObj, LongObj, StringObj}
 import de.sciss.lucre.stm.Obj
@@ -38,6 +38,7 @@ object SessionMini {
   final val NameLocBase   = "base"    // ArtifactLocation
   final val NameSphere    = "sphere"  // SphereGNG
   final val NameAudio     = "audio"   // Ensemble
+  final val NameOsc       = "osc"     // OscNode
 
   def main(args: Array[String]): Unit = {
     SoundProcesses.init()
@@ -75,6 +76,23 @@ object SessionMini {
       val actStop   = mkStopEnsembleAction()
       listB += actStop
 
+      val osc   = OscNode[S]
+      osc.name  = NameOsc
+      val aO    = osc.attr
+
+      val isMacMini = Koerper.auxDir.path.contains("Documents")
+      val localIp = if (isMacMini) {
+        Koerper.IpMacMini
+      } else {
+        Koerper.IpHH
+      }
+      aO.put(OscNode.attrLocalHost  , StringObj .newVar(localIp))
+      aO.put(OscNode.attrTargetHost , StringObj .newVar(Koerper.IpRaspiVideo      ))
+      aO.put(OscNode.attrTargetPort , IntObj    .newVar(Koerper.OscPortRaspiVideo ))
+      val oscRcv = mkOscReceive()
+      aO.put(OscNode.attrReceive, oscRcv)
+      listB += osc
+
       val folderUS  = Folder[S]
       folderUS.name = NameFolderUS
       listB += folderUS
@@ -83,7 +101,7 @@ object SessionMini {
       listB += recChunkEns
       val constQ    = ConstQConfig.mkObj[S](ConstQConfig())
       listB += constQ
-      val renderPD  = RenderProbabilityDistribution.mkObjects(constQ, locBase)
+      val renderPD  = RenderProbabilityDistribution.mkObjects(constQ, locBase, osc)
       listB ++= renderPD
       val folderPD  = Folder[S]
       folderPD.name = NameFolderPD
@@ -103,6 +121,31 @@ object SessionMini {
     }
 
     ws
+  }
+
+  def mkOscReceive()(implicit tx: S#Tx): Action[S] = {
+    val a = proc.Action.apply[S] { u =>
+      u.value match {
+        case osc.Message("/shutdown") =>
+          tx.afterCommit {
+            import sys.process._
+            println("SHUTDOWN")
+            Seq("sudo", "shutdown", "now").run()
+          }
+
+        case osc.Message("/reboot"  ) =>
+          tx.afterCommit {
+            import sys.process._
+            println("REBOOT")
+            Seq("sudo", "reboot", "now").run()
+          }
+
+        case other =>
+          println(s"Warning: Ignoring unsupported message $other")
+      }
+    }
+    a.name = "osc-receive"
+    a
   }
 
   def mkUltrasoundPlay()(implicit tx: S#Tx): Proc[S] = {
@@ -148,7 +191,7 @@ object SessionMini {
     a.put(SphereGNG.attrGngMaxNeighbors , IntObj    .newVar(10))
     a.put(SphereGNG.attrGngThrottle     , IntObj    .newVar(50))
 //    a.put(SphereGNG.attrGngMinEnergy    , DoubleObj .newVar(...))
-//    a.put(SphereGNG.attrGngMaxEnergy    , DoubleObj .newVar(...))
+    a.put(SphereGNG.attrGngMaxEnergy    , DoubleObj .newVar(140000.0))
 
     sphere.name = NameSphere
     sphere
