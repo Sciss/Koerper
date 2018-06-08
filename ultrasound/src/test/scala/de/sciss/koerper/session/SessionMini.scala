@@ -191,8 +191,8 @@ object SessionMini {
     a.put(SphereGNG.attrGngMaxEdgeAge   , IntObj    .newVar(100))   // 1000
     a.put(SphereGNG.attrGngMaxNeighbors , IntObj    .newVar(10))
     a.put(SphereGNG.attrGngThrottle     , IntObj    .newVar(50))
-    a.put(SphereGNG.attrGngMinEnergy    , DoubleObj .newVar( 28000.0))
-    a.put(SphereGNG.attrGngMaxEnergy    , DoubleObj .newVar(140000.0))
+    a.put(SphereGNG.attrGngMinEnergy    , DoubleObj .newVar( 20000.0)) // 28000.0
+    a.put(SphereGNG.attrGngMaxEnergy    , DoubleObj .newVar(110000.0)) // 140000.0
 
     sphere.name = NameSphere
     sphere
