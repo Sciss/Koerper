@@ -43,6 +43,7 @@ object Koerper {
   val IpRaspiVideo      = "192.168.0.27"
   val OscPortDavid      = 7771
   val OscPortRaspiVideo = 57111
+  val OscPortMini       = 57111
   val OscSocketDavid    = new InetSocketAddress(IpDavid, OscPortDavid)
   val JackClientName    = "Koerper"
 

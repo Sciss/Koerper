@@ -87,6 +87,7 @@ object SessionMini {
         Koerper.IpHH
       }
       aO.put(OscNode.attrLocalHost  , StringObj .newVar(localIp))
+      aO.put(OscNode.attrLocalPort  , IntObj    .newVar(Koerper.OscPortMini       ))
       aO.put(OscNode.attrTargetHost , StringObj .newVar(Koerper.IpRaspiVideo      ))
       aO.put(OscNode.attrTargetPort , IntObj    .newVar(Koerper.OscPortRaspiVideo ))
       val oscRcv = mkOscReceive()
