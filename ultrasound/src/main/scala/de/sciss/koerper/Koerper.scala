@@ -17,13 +17,13 @@ import java.net.InetSocketAddress
 
 import de.sciss.desktop.DocumentHandler
 import de.sciss.file._
-import de.sciss.koerper.lucre.{Eye, EyeFrame, OscNode, OscNodeFrame, SphereGNG}
+import de.sciss.koerper.lucre.{Eye, EyeFrame, OscNode, OscNodeFrame, SphereGNG, SphereGNGFrame}
 import de.sciss.lucre.stm
 import de.sciss.lucre.synth.{InMemory, Sys}
 import de.sciss.mellite.gui.{ActionOpenWorkspace, EnsembleFrame}
 import de.sciss.mellite.{Application, Mellite}
 import de.sciss.synth.proc.Implicits._
-import de.sciss.synth.proc.{Action, Ensemble, SoundProcesses, Workspace}
+import de.sciss.synth.proc.{Action, Ensemble, Workspace}
 
 import scala.swing.Swing
 
@@ -158,7 +158,8 @@ object Koerper {
 
   def startSphere[S <: Sys[S]](sph: SphereGNG[S])
                               (implicit tx: S#Tx, cursor: stm.Cursor[S], workspace: Workspace[S]): Unit = {
-    ???
+    val f = SphereGNGFrame(sph)
+    f.run = true
   }
 
 //  def raspiDisableEnergySaving(): Unit = {

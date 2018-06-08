@@ -23,4 +23,7 @@ object SphereGNGView {
                                             workspace: Workspace[S]): SphereGNGView[S] = impl.SphereGNGViewImpl(obj)
 }
 trait SphereGNGView[S <: Sys[S]] extends ViewHasWorkspace[S] {
+  def run(implicit tx: S#Tx): Boolean
+
+  def run_=(value: Boolean)(implicit tx: S#Tx): Unit
 }

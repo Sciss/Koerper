@@ -73,8 +73,8 @@ object SphereGNGViewImpl {
 
     private[this] var _chart  : AWTChart  = _
 
-    private[this] val runChart  = Ref(true  )
-    private[this] val runOsc    = Ref(false )
+    private[this] val runChart  = Ref(false) // (true  )
+    private[this] val runOsc    = Ref(true ) // (false )
 
     private[this] val defaultGngCfg = Config()
     private[this] val defaultOscCfg = OscConfig()
@@ -82,6 +82,8 @@ object SphereGNGViewImpl {
     private[this] val pdRef       = Ref[PD](PD.Uniform)
     private[this] val oscRef      = Ref(Option.empty[OscObserver])
     private[this] val oscDumpRef  = Ref(false)
+
+    private[this] val runRef      = Ref(false)
 
     private type EvtMap = evt.Map[S, String, Obj]
 
@@ -338,14 +340,29 @@ object SphereGNGViewImpl {
       this
     }
 
+    def run(implicit tx: S#Tx): Boolean = runRef.get(tx.peer)
+
+    def run_=(value: Boolean)(implicit tx: S#Tx): Unit = {
+      val oldValue = runRef.swap(value)(tx.peer)
+      if (oldValue != value) deferTx {
+        if (value) startAlgorithm() else stopAlgorithm()
+        ggPower.selected = value
+      }
+    }
+
+    private[this] var ggPower: ToggleButton = _
+
     private def guiInit(): Unit = {
       algorithm.init(createTwo = false)(gngCfg)
 
-      val ggPower = new ToggleButton {
+      ggPower = new ToggleButton {
         listenTo(this)
         reactions += {
           case ButtonClicked(_) =>
-            if (selected) startAlgorithm() else stopAlgorithm()
+            val _run = selected
+            impl.cursor.step { implicit tx =>
+              run = _run
+            }
         }
       }
       val shpPower          = raphael.Shapes.Power _
@@ -371,7 +388,8 @@ object SphereGNGViewImpl {
       ggOsc.icon          = GUI.iconNormal  (shpOsc)
       ggOsc.disabledIcon  = GUI.iconDisabled(shpOsc)
       ggOsc.tooltip       = "Run/Pause OSC Transmission"
-      
+      ggOsc.selected      = true
+
       val ggChart = new ToggleButton {
         listenTo(this)
         reactions += {
@@ -390,7 +408,7 @@ object SphereGNGViewImpl {
       ggChart.icon          = GUI.iconNormal  (shpChart)
       ggChart.disabledIcon  = GUI.iconDisabled(shpChart)
       ggChart.tooltip       = "Run/Pause Chart Display"
-      ggChart.selected      = true
+//      ggChart.selected      = true
 
       val ggDumpOsc = new ToggleButton("Dump OSC") {
         listenTo(this)
@@ -452,8 +470,9 @@ object SphereGNGViewImpl {
         oscT.send(m, target)
       } catch {
         case NonFatal(ex) =>
-          Console.err.println(s"Dropped OSC message:")
-          ex.printStackTrace()
+//          Console.err.println(s"Dropped OSC message:")
+//          ex.printStackTrace()
+          Console.err.println(s"Dropped OSC message: ${ex.getClass.getName} - ${ex.getMessage}")
       }
 
       def gngNodeInserted(n: Node): Unit = {
