@@ -135,6 +135,9 @@ object SphereGNG extends Obj.Type {
   val oscAttr: Set[String] = Set(
     attrOscTargetHost , attrOscTargetPort , attrOscTransport, attrOscLocalHost, attrOscLocalPort
   )
+
+  val attrAll: Set[String] =
+    SphereGNG.configAttr ++ SphereGNG.oscAttr + SphereGNG.attrGngThrottle + SphereGNG.attrTable
 }
 /** A parameters are modelled by the attribute map. */
 trait SphereGNG[S <: Sys[S]] extends Obj[S] /* with Publisher[S, SphereGNG.Update[S]] */ {

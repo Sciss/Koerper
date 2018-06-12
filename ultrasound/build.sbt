@@ -1,7 +1,7 @@
 lazy val baseName  = "Koerper-Ultrasound"
 lazy val baseNameL = baseName.toLowerCase
 
-lazy val projectVersion = "0.1.3"
+lazy val projectVersion = "0.2.0-SNAPSHOT"
 
 def appMainClass = Some("de.sciss.koerper.Koerper")
 
@@ -71,7 +71,7 @@ lazy val deps = new {
     val kdTree            = "0.1.1"
     val kollflitz         = "0.2.2"
     val lucre             = "3.8.0"
-    val mellite           = "2.23.3"
+    val mellite           = "2.24.0-SNAPSHOT"
     val neuralGas         = "2.3.2"
     val numbers           = "0.2.0"
     val scalaOSC          = "1.1.6"

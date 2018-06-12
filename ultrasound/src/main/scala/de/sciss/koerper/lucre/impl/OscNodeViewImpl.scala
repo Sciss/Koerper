@@ -19,10 +19,10 @@ import java.util.regex.Pattern
 import de.sciss.icons.raphael
 import de.sciss.koerper.Koerper
 import de.sciss.koerper.lucre.impl.OscNodeImpl.Stateful
-import de.sciss.lucre.stm.{Disposable, Obj, Sys}
+import de.sciss.lucre.stm
+import de.sciss.lucre.stm.{Disposable, Sys}
 import de.sciss.lucre.swing.deferTx
 import de.sciss.lucre.swing.impl.ComponentHolder
-import de.sciss.lucre.{stm, event => evt}
 import de.sciss.mellite.gui.GUI
 import de.sciss.osc
 import de.sciss.synth.proc.Workspace
@@ -47,7 +47,7 @@ object OscNodeViewImpl {
 
     private[this] var observer: Disposable[S#Tx] = _
 
-    private type EvtMap = evt.Map[S, String, Obj]
+//    private type EvtMap = evt.Map[S, String, Obj]
 
     def init(obj: OscNode[S])(implicit tx: S#Tx): this.type = {
       deferTx(guiInit())

@@ -21,18 +21,17 @@ import java.util.concurrent.ConcurrentLinkedDeque
 
 import de.sciss.icons.raphael
 import de.sciss.koerper.Koerper
-import de.sciss.lucre.expr.{DoubleObj, IntObj, StringObj}
-import de.sciss.lucre.stm.{Disposable, Obj, Sys, TxnLike}
+import de.sciss.lucre.stm
+import de.sciss.lucre.stm.{Obj, Sys, TxnLike}
 import de.sciss.lucre.swing.deferTx
 import de.sciss.lucre.swing.impl.ComponentHolder
-import de.sciss.lucre.{stm, event => evt}
+import de.sciss.mellite.Mellite
 import de.sciss.mellite.gui.GUI
-import de.sciss.numbers
 import de.sciss.neuralgas.sphere.SphereGNG.Config
 import de.sciss.neuralgas.sphere.{Edge, Loc, Node, Observer, PD}
-import de.sciss.osc
 import de.sciss.synth.io.AudioFile
 import de.sciss.synth.proc.{AudioCue, Workspace}
+import de.sciss.{numbers, osc}
 import javax.swing.JPanel
 import org.jzy3d.chart.{AWTChart, ChartLauncher}
 import org.jzy3d.colors.Color
@@ -56,9 +55,8 @@ object SphereGNGViewImpl {
                                      transport: osc.Transport = osc.UDP)
 
   private final class Impl[S <: Sys[S]](implicit val cursor: stm.Cursor[S], val workspace: Workspace[S])
-    extends SphereGNGView[S] with ComponentHolder[Component] { impl =>
+    extends SphereGNGView[S] with MultiAttrObserver[S] with ComponentHolder[Component] { impl =>
 
-    private[this] var observer: Disposable[S#Tx] = _
     private[this] val algorithm = new SphereGNGImpl
 
     @volatile
@@ -85,34 +83,11 @@ object SphereGNGViewImpl {
 
     private[this] val runRef      = Ref(false)
 
-    private type EvtMap = evt.Map[S, String, Obj]
+    private[this] lazy val _chartObs = new ChartObserver
 
-    private def getDouble(key: String, default: Double)(implicit tx: S#Tx, map: EvtMap): Double =
-      map.get(key) match {
-        case Some(v: DoubleObj[S])  => v.value
-        case Some(v: IntObj   [S])  => v.value.toDouble
-        case _                      => default
-      }
+    private[this] val timerRef = Ref(Option.empty[java.util.Timer])
 
-    // accepts doubles as well
-    private def getIntD(key: String, default: Int)(implicit tx: S#Tx, map: EvtMap): Int =
-      map.get(key) match {
-        case Some(v: IntObj   [S])  => v.value
-        case Some(v: DoubleObj[S])  => v.value.toInt
-        case _                      => default
-      }
-
-    private def getInt(key: String, default: Int)(implicit tx: S#Tx, map: EvtMap): Int =
-      map.get(key) match {
-        case Some(v: IntObj[S]) => v.value
-        case _                  => default
-      }
-
-    private def getString(key: String, default: String)(implicit tx: S#Tx, map: EvtMap): String =
-      map.get(key) match {
-        case Some(v: StringObj[S])  => v.value
-        case _                      => default
-      }
+    private[this] var objH: stm.Source[S#Tx, SphereGNG[S]] = _
 
     private def mkAndStoreOscObserver()(implicit tx: InTxn): OscObserver = {
       disposeOscObserver()
@@ -147,15 +122,15 @@ object SphereGNGViewImpl {
       oscDumpRef() = onOff
     }
 
-    private def mkObs()(implicit tx: InTxn): Observer = {
+    private def mkGngObs()(implicit tx: InTxn): Observer = {
       val _chart  = runChart()
       val _osc    = runOsc  ()
       val obs     = if (_chart && _osc) {
         val obs1 = mkAndStoreOscObserver()
-        val obs2 = new ChartObserver
+        val obs2 = _chartObs // new ChartObserver
         new MultiObserver(obs1, obs2)
       } else if (_chart) {
-        new ChartObserver
+        _chartObs // new ChartObserver
       } else if (_osc) {
         mkAndStoreOscObserver()
       } else {
@@ -168,7 +143,7 @@ object SphereGNGViewImpl {
       import SphereGNG._
       import TxnLike.peer
 
-      val _obs  = mkObs()
+      val _obs  = mkGngObs()
       val pd    = pdRef()
 
       val maxNodes = pd match {
@@ -203,8 +178,8 @@ object SphereGNGViewImpl {
       gngCfg = c
     }
 
-    private def updateObs()(implicit tx: InTxn): Unit = {
-      val _obs  = mkObs()
+    private def updateGngObs()(implicit tx: InTxn): Unit = {
+      val _obs  = mkGngObs()
       val c     = gngCfg.copy(observer = _obs)
       gngCfg = c
     }
@@ -241,27 +216,34 @@ object SphereGNGViewImpl {
       oscCfg = c
     }
 
-    private def checkUpdate(map: EvtMap, key: String)(implicit tx: S#Tx): Unit = {
+
+    protected def checkMultiAttrUpdate(map: EvtMap, key: String, value: Obj[S])(implicit tx: S#Tx): Boolean = {
       import TxnLike.peer
       implicit val _map: EvtMap = map
-      if (SphereGNG.configAttr.contains(key)) {
+      val mkObs = if (SphereGNG.configAttr.contains(key)) {
         mkGngConfig()
+        true
       }
       else if (SphereGNG.oscAttr.contains(key)) {
         mkOscConfig()
         if (runOsc()) mkGngConfig()
+        true
       }
       else if (key == SphereGNG.attrTable) {
         if (updateCue()) {
           mkGngConfig()
         }
+        false
       }
       else if (key == SphereGNG.attrGngThrottle) {
         mkThrottle()
+        true
+      } else {
+        false
       }
-    }
 
-    private[this] val timerRef = Ref(Option.empty[java.util.Timer])
+      mkObs
+    }
 
     private def isAlgorithmRunning: Boolean = timerRef.single.get.isDefined
 
@@ -271,7 +253,7 @@ object SphereGNGViewImpl {
       val tt  = new TimerTask {
         def run(): Unit = {
           algorithm.step()(gngCfg)
-          oscRef.single.get.foreach { oscObs =>
+          if (runOsc.single.get) oscRef.single.get.foreach { oscObs =>
             oscObs.send(osc.Message("/frame"))
           }
         }
@@ -319,16 +301,15 @@ object SphereGNGViewImpl {
       opt.isDefined
     }
 
+    protected def multiAttrKeys: Set[String] = SphereGNG.attrAll
+
+    protected def multiAttrMap(implicit tx: S#Tx): EvtMap =
+      objH().attr
+
     def init(obj: SphereGNG[S])(implicit tx: S#Tx): this.type = {
+      objH = tx.newHandle(obj)
       deferTx(guiInit())
-      observer = obj.attr.changed.react { implicit tx => upd =>
-        upd.changes.foreach {
-          case Obj.AttrAdded    (key, _)    => checkUpdate(upd.map, key)
-          case Obj.AttrRemoved  (key, _)    => checkUpdate(upd.map, key)
-          case Obj.AttrReplaced (key, _, _) => checkUpdate(upd.map, key)
-          case _ =>
-        }
-      }
+      initMultiAttr(obj)
 
       implicit val map: EvtMap = obj.attr
 
@@ -379,7 +360,7 @@ object SphereGNGViewImpl {
             impl.cursor.step { implicit tx =>
               import TxnLike.{peer => _peer}
               runOsc() = selected
-              updateObs()
+              updateGngObs()
             }
             if (r) startAlgorithm()
         }
@@ -399,7 +380,7 @@ object SphereGNGViewImpl {
             impl.cursor.step { implicit tx =>
               import TxnLike.{peer => _peer}
               runChart() = selected
-              updateObs()
+              updateGngObs()
             }
             if (r) startAlgorithm()
         }
@@ -444,6 +425,12 @@ object SphereGNGViewImpl {
 
       val p = new JPanel(new BorderLayout())
       val chartC = _chart.getCanvas.asInstanceOf[java.awt.Component]
+      if (Mellite.isDarkSkin) {
+        val chartV = _chart.getAWTView
+        chartV.setBackgroundColor(Color.BLACK)
+        _chart.getAxeLayout.setMainColor(Color.GRAY)
+//        chartC.setForeground(java.awt.Color.WHITE)
+      }
       chartC.setPreferredSize(new Dimension(480, 480))
       p.add(BorderLayout.CENTER , chartC)
       p.add(BorderLayout.SOUTH  , pBot.peer)
@@ -453,7 +440,7 @@ object SphereGNGViewImpl {
 
     def dispose()(implicit tx: S#Tx): Unit = {
       import TxnLike.peer
-      observer.dispose()
+      disposeMultiAttrObserver()
       stopAlgorithm()
       disposeOscObserver()
       deferTx {
@@ -594,17 +581,22 @@ object SphereGNGViewImpl {
         new Coord3d(x, y, z)
       }
 
+      private[this] val foreground = if (Mellite.isDarkSkin) Color.WHITE else Color.BLACK
+
       private def mkLineStrip(theta1: Double, phi1: Double, theta2: Double, phi2: Double): LineStrip = {
         val d = centralAngle(theta1, phi1, theta2, phi2)
         val numIntp = math.max(2, (d * 18).toInt)
-        val c = Vector.tabulate(numIntp) { i =>
+        val c = new Array[Coord3d](numIntp)
+        var i = 0
+        while (i < numIntp) {
           val f = i.toDouble / (numIntp - 1)
           val p = interpolate(theta1, phi1, theta2, phi2, d, f)
-          p // mkCoord(p)
+          c(i) = p // mkCoord(p)
+          i += 1
         }
 
         val ln = new LineStrip(c: _*)
-        ln.setWireframeColor(Color.BLACK)
+        ln.setWireframeColor(foreground)
         ln
       }
 
@@ -639,9 +631,18 @@ object SphereGNGViewImpl {
         push(new CmdNodeUpdate(nid, theta1, phi1, ptNew))
       }
 
+//      private def logInfo(what: String): Unit =
+//        println(s"Info: $what")
+
+      private def logWarn(what: String): Unit =
+        println(s"Warning: $what")
+
       private final class CmdNodeUpdate(nid: Int, theta1: Double, phi1: Double, ptNew: Point) extends Cmd {
         def execute(redraw: Boolean): Unit = {
-          nodeMap.get(nid).foreach { data =>
+          nodeMap.get(nid).fold[Unit] {
+            logWarn(s"node update - node $nid not found")
+          } { data =>
+//            logInfo(s"node update - $nid")
             _chart.removeDrawable(data.pt, false)
           }
           nodeMap(nid) = new NodeData(theta1, phi1, ptNew)
@@ -673,6 +674,7 @@ object SphereGNGViewImpl {
 
       private final class CmdNodeInsert(nid: Int, theta: Double, phi: Double, ptNew: Point) extends Cmd {
         def execute(redraw: Boolean): Unit = {
+//          logInfo(s"node insert - $nid")
           nodeMap(nid) = new NodeData(theta, phi, ptNew)
           _chart.add(ptNew, redraw)
         }
@@ -690,8 +692,11 @@ object SphereGNGViewImpl {
               removeEdge(nid, toId, redraw = false)
             }
           }
-          nodeMap.remove(nid).foreach { data =>
+          nodeMap.remove(nid).fold[Unit] {
+            logWarn(s"node remove - node $nid not found")
+          } { data =>
             _chart.removeDrawable(data.pt, redraw)
+//            logInfo(s"node remove - $nid")
           }
         }
       }
@@ -742,8 +747,12 @@ object SphereGNGViewImpl {
 
       private def removeEdge(fromId: Int, toId: Int, redraw: Boolean): Unit = {
         val m00 = edgeMap.getOrElse(fromId, Map.empty)
+        var removed = false
         m00.get(toId).foreach { lnVar =>
-          if (lnVar.ln != null) _chart.removeDrawable(lnVar.ln, redraw)
+          if (lnVar.ln != null) {
+            _chart.removeDrawable(lnVar.ln, redraw)
+            removed = true
+          }
           lnVar.ln == null
         }
         val m01 = m00 - toId
@@ -751,11 +760,17 @@ object SphereGNGViewImpl {
 
         val m10 = edgeMap.getOrElse(toId  , Map.empty)
         m10.get(toId).foreach { lnVar =>
-          if (lnVar.ln != null) _chart.removeDrawable(lnVar.ln, redraw)
+          if (lnVar.ln != null) {
+            _chart.removeDrawable(lnVar.ln, redraw)
+            removed = true
+          }
           lnVar.ln == null
         }
         val m11 = m10 - fromId
         edgeMap(toId  ) = m11
+
+        if (!removed)
+          logWarn(s"edge remove - edge ($fromId, $toId) not found")
       }
     }
 

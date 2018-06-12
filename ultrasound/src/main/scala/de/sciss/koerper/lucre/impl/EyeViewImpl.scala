@@ -19,10 +19,10 @@ import java.awt.event.{ActionEvent, KeyEvent}
 import java.awt.image.BufferedImage
 
 import de.sciss.koerper.Koerper
-import de.sciss.lucre.stm.{Disposable, Obj, Sys, TxnLike}
+import de.sciss.lucre.stm
+import de.sciss.lucre.stm.{Obj, Sys, TxnLike}
 import de.sciss.lucre.swing.deferTx
 import de.sciss.lucre.swing.impl.ComponentHolder
-import de.sciss.lucre.{stm, event => evt}
 import de.sciss.neuralgas.sphere.PD
 import de.sciss.neuralgas.sphere.impl.LocVarImpl
 import de.sciss.numbers.DoubleFunctions
@@ -45,29 +45,72 @@ object EyeViewImpl {
                                      transport: osc.Transport = osc.UDP)
 
   private final class Impl[S <: Sys[S]](implicit val cursor: stm.Cursor[S], val workspace: Workspace[S])
-    extends EyeView[S] with ComponentHolder[Component] { impl =>
-
-    private[this] var observer: Disposable[S#Tx] = _
+    extends EyeView[S] with MultiAttrObserver[S] with ComponentHolder[Component] { impl =>
 
     @volatile
     private[this] var pdRef: PD = PD.Uniform
 
     private[this] var img: BufferedImage = _
 
-    private type EvtMap = evt.Map[S, String, Obj]
+    private[this] val timerRef = Ref(Option.empty[javax.swing.Timer])
 
-    private def checkUpdate(map: EvtMap, key: String)(implicit tx: S#Tx): Unit = {
-      implicit val _map: EvtMap = map
-      if (key == Eye.attrTable) {
-        updateCue()
+    private[this] val runState = Ref(false)
+
+    private[this] var objH: stm.Source[S#Tx, Eye[S]] = _
+
+    private[this] var rotX  = 0.0
+    private[this] var rotY  = 0.0
+
+    private[this] final val Pi2 = math.Pi * 2
+    private[this] final val rotXD = 0.023.toRadians
+    private[this] final val rotYD = 0.011.toRadians
+
+    private[this] val locVar = new LocVarImpl
+
+    private[this] val loadCueRef = Ref(Option.empty[Processor[PD]])
+
+    private[this] final val cosTable = Array.tabulate(32768)(i => Math.cos(i * Math.PI / 65536))
+
+    private[this] final val PiH = Math.PI / 2
+
+    private[this] final val EXT   = 480 // 1080
+    private[this] final val EXTM  = EXT - 1
+
+
+    @volatile
+    private[this] var maxPoints = 1
+
+    @volatile
+    private[this] var pointFraction = 1.0
+
+    @volatile
+    private[this] var N = 0
+
+    protected def multiAttrKeys: Set[String] = Eye.attrAll
+
+    protected def multiAttrMap(implicit tx: S#Tx): EvtMap = objH().attr
+
+    private def mkN()(implicit tx: S#Tx, map: EvtMap): Unit = {
+      maxPoints       = math.max(0, getInt(Eye.attrMaxPoints, 192000))
+      pointFraction   = math.max(0.0, math.min(1.0, getDouble(Eye.attrPointFraction, 0.5)))
+      N               = pdRef match {
+        case _pd: ProbDist  => math.min(maxPoints, (_pd.energy * pointFraction).toInt)
+        case _              => maxPoints
       }
     }
 
-    private[this] val timerRef = Ref(Option.empty[javax.swing.Timer])
-
-//    private def isAlgorithmRunning: Boolean = timerRef.single.get.isDefined
-
-    private[this] val runState = Ref(false)
+    protected def checkMultiAttrUpdate(map: EvtMap, key: String, value: Obj[S])(implicit tx: S#Tx): Boolean = {
+      implicit val _map: EvtMap = map
+      if (key == Eye.attrTable) {
+        updateCue()
+        false
+      } else if (key == Eye.attrMaxPoints || key == Eye.attrPointFraction) {
+        mkN()
+        true
+      } else {
+        false
+      }
+    }
 
     def run(implicit tx: S#Tx): Boolean = {
       import TxnLike.peer
@@ -99,8 +142,6 @@ object EyeViewImpl {
       timerRef.single.swap(None).foreach(_.stop())
     }
 
-    private[this] val loadCueRef = Ref(Option.empty[Processor[PD]])
-
     private def cancelLoad()(implicit tx: TxnLike): Unit =
       loadCueRef.swap(None)(tx.peer).foreach { pOld => tx.afterCommit(pOld.abort()) }
 
@@ -115,6 +156,7 @@ object EyeViewImpl {
         import SoundProcesses.executionContext
         p.foreach { pd =>
           pdRef = pd
+          N     = math.min(maxPoints, (pd.energy * pointFraction).toInt)
         }
         p.onComplete { _ =>
           atomic { implicit tx =>
@@ -125,34 +167,16 @@ object EyeViewImpl {
     }
 
     def init(obj: Eye[S])(implicit tx: S#Tx): this.type = {
+      objH = tx.newHandle(obj)
       deferTx(guiInit())
-      observer = obj.attr.changed.react { implicit tx => upd =>
-        upd.changes.foreach {
-          case Obj.AttrAdded    (key, _)    => checkUpdate(upd.map, key)
-          case Obj.AttrRemoved  (key, _)    => checkUpdate(upd.map, key)
-          case Obj.AttrReplaced (key, _, _) => checkUpdate(upd.map, key)
-          case _ =>
-        }
-      }
+      initMultiAttr(obj)
 
       implicit val map: EvtMap = obj.attr
 
       updateCue()
+      mkN()
       this
     }
-
-    private[this] var rotX  = 0.0
-    private[this] var rotY  = 0.0
-
-    private[this] final val Pi2 = math.Pi * 2
-    private[this] final val rotXD = 0.023.toRadians
-    private[this] final val rotYD = 0.011.toRadians
-
-    private[this] val locVar = new LocVarImpl
-
-//    private[this] val oval = new Ellipse2D.Double
-
-    private[this] final val cosTable = Array.tabulate(32768)(i => Math.cos(i * Math.PI / 65536))
 
     private def cosF(in: Double): Double = {
       val w = DoubleFunctions.wrap(in, 0.0, Pi2)
@@ -179,8 +203,6 @@ object EyeViewImpl {
       }
     }
 
-    private[this] final val PiH = Math.PI / 2
-
     private def sinF(in: Double): Double = {
       cosF(in - PiH)
     }
@@ -193,14 +215,14 @@ object EyeViewImpl {
       g.setColor(Color.black)
       g.fillRect(0, 0, EXT, EXT)
       g.setColor(Color.white)
-      val N = 192000  // XXX TODO --- scale according to ProbDist.energy
+      val _N = N
       var i = 0
       val _rotX = rotX
       val _rotY = rotY
       val _loc = locVar
 //      val _oval = oval
       val pd = pdRef
-      while (i < N) {
+      while (i < _N) {
         pd.poll(_loc)
         val sinTheta = sinF(_loc.theta)
         val x0 = sinTheta * cosF(_loc.phi)
@@ -264,9 +286,6 @@ object EyeViewImpl {
       }
     }
 
-    private[this] final val EXT   = 480 // 1080
-    private[this] final val EXTM  = EXT - 1
-
     private def guiInit(): Unit = {
 //      algorithm.init(createTwo = false)(gngCfg)
 
@@ -292,33 +311,11 @@ object EyeViewImpl {
         }
       })
 
-//      val ggPower = new ToggleButton {
-//        listenTo(this)
-//        reactions += {
-//          case ButtonClicked(_) =>
-//            val _run = selected
-//            impl.cursor.step { implicit tx =>
-//              run = _run
-//            }
-//        }
-//      }
-//      val shpPower          = raphael.Shapes.Power _
-//      ggPower.icon          = GUI.iconNormal  (shpPower)
-//      ggPower.disabledIcon  = GUI.iconDisabled(shpPower)
-//      ggPower.tooltip       = "Run/Pause Algorithm"
-//
-//      val pBot = new FlowPanel(ggPower)
-//
-//      val p = new JPanel(new BorderLayout())
-//      p.add(BorderLayout.CENTER , (new C).peer)
-//      p.add(BorderLayout.SOUTH  , pBot.peer)
-//
-//      component = Component.wrap(p)
       component = c
     }
 
     def dispose()(implicit tx: S#Tx): Unit = {
-      observer.dispose()
+      disposeMultiAttrObserver()
       stopAlgorithm()
       cancelLoad()
     }
