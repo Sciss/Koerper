@@ -363,7 +363,7 @@ final class SphereGNGImpl {
 
     val _nn1 = numNodes
     if (/* (_nn1 > 2) && */ (dang && _nn1 > maxNodes0) || maxError > minUtility * utility) {
-      deleteNodeAndFire(minUtilityIdx)
+      if (minUtilityIdx >= 0) deleteNodeAndFire(minUtilityIdx)
     }
 
     // step += 1
