@@ -82,6 +82,8 @@ object RecordAudioChunk {
       val art     = Artifact(locBase, Artifact.Child(child))
       pRec.attr.put("out", art)
       ens.play()
+
+      println(s"[${new java.util.Date}] Körper: recording started.")
     }
 
     a.name = NameIterate
@@ -93,6 +95,8 @@ object RecordAudioChunk {
       import de.sciss.fscape.lucre.FScape
       import de.sciss.fscape.stream.Control
       import de.sciss.synth.proc.GenContext
+
+      println(s"[${new java.util.Date}] Körper: recording stopped.")
 
       // store the chunk in the 'us' folder
 //      val folderUS  = u.root.![Folder]("us")
@@ -123,6 +127,8 @@ object RecordAudioChunk {
       import u.{cursor, workspace}
       implicit val gtx: GenContext[S] = GenContext[S]
       /* val r = */ FScape.Rendering(fsc, cfgFsc)
+
+      println(s"[${new java.util.Date}] Körper: FScape rendering started.")
     }
 
     a.name = "rec-done"

@@ -168,15 +168,17 @@ object RenderProbabilityDistribution {
       import de.sciss.fscape.lucre.FScape
       import de.sciss.koerper.lucre.{OscNode, SphereGNG}
 
+      println(s"[${new java.util.Date}] Körper: FScape rendering stopped.")
+
       // store the chunk in the 'us' folder
-//      val folderPD  = u.root.![Folder]("pd")
+      // val folderPD  = u.root.![Folder]("pd")
       val fsc       = u.root.![FScape]("render-pd")
       val artTab    = fsc.attr.![Artifact]("table-out")
       val artTabVal = artTab.value
       val specTab   = de.sciss.synth.io.AudioFile.readSpec(artTabVal)
       val cueTab    = AudioCue.Obj(artTab, specTab, offset = 0L, gain = 1.0)
       cueTab.name   = artTabVal.getName
-//      folderPD.addLast(cueTab)
+      // folderPD.addLast(cueTab)
 
       // set it as 'table' parameter for GNG
       val sphere    = u.root.![SphereGNG]("sphere")
@@ -210,12 +212,14 @@ object RenderProbabilityDistribution {
         }
       }
 
-      println(s"[${new java.util.Date}] Körper: iteration done.")
-      val run       = u.root.![BooleanObj]("run").value
+      val run = u.root.![BooleanObj]("run").value
       if (run) {
         val iterate = u.root.![Action]("iterate")
+        println(s"[${new java.util.Date}] Körper: iteration done. Run is 'true'.")
         import u._
         iterate.execute(Action.Universe(iterate, workspace))
+      } else {
+        println(s"[${new java.util.Date}] Körper: iteration done. Run is 'false'.")
       }
     }
 
