@@ -15,7 +15,7 @@ package de.sciss.koerper
 package session
 
 import de.sciss.lucre.artifact.{Artifact, ArtifactLocation}
-import de.sciss.lucre.expr.{BooleanObj, DoubleObj, DoubleVector}
+import de.sciss.lucre.expr.{BooleanObj, DoubleObj, DoubleVector, IntObj}
 import de.sciss.lucre.stm.Obj
 import de.sciss.lucre.synth.Sys
 import de.sciss.synth.proc
@@ -69,19 +69,39 @@ object RecordAudioChunk {
   private def mkPrepareAction[S <: Sys[S]]()(implicit tx: S#Tx): proc.Action[S] = {
     val a = proc.Action.apply[S] { u =>
       println(s"[${new java.util.Date}] Körper: iteration begin.")
-      val locBase = u.root.![ArtifactLocation]("base")
-      val ens     = u.root.![Ensemble]("rec-audio-chunk")
+      val locBase   = u.root.![ArtifactLocation]("base")
+      val ens       = u.root.![Ensemble]("rec-audio-chunk")
+      val countVal  = u.root.![IntObj]("iterations").value
       ens.stop()
-      val pRec    = ens.![Proc]("proc")
+      val pRec      = ens.![Proc]("proc")
       // N.B. we have a race condition when using AIFF: the done action may see
       // the file before the header is flushed, thus reading numFrames == 0.
       // If we use IRCAM, the header does not carry numFrames information.
-      val fmt     = new java.text.SimpleDateFormat("'us-'yyMMdd_HHmmss'.irc'", java.util.Locale.US)
-      val name    = fmt.format(new java.util.Date)
-      val child   = new java.io.File("us", name).getPath
-      val art     = Artifact(locBase, Artifact.Child(child))
+      val fmt       = new java.text.SimpleDateFormat("'us-'yyMMdd_HHmmss'.irc'", java.util.Locale.US)
+      val name      = fmt.format(new java.util.Date)
+      val child     = new java.io.File("us", name).getPath
+      val art       = Artifact(locBase, Artifact.Child(child))
       pRec.attr.put("out", art)
       ens.play()
+
+      tx.afterCommit {
+        de.sciss.synth.proc.SoundProcesses.scheduledExecutorService.schedule(
+          new Runnable {
+            def run(): Unit = {
+              import u._
+              cursor.step { implicit tx =>
+                val countVal1 = u.root.![IntObj]("iterations").value
+                if (countVal == countVal1) {
+                  println(s"[${new java.util.Date}] Körper: the fucking fuck - timeout!")
+                  import de.sciss.synth.proc
+                  val iterate = u.root.![proc.Action]("iterate")
+                  iterate.execute(proc.Action.Universe(iterate, workspace))
+                }
+              }
+            }
+          }, 5, java.util.concurrent.TimeUnit.MINUTES
+        )
+      }
 
       println(s"[${new java.util.Date}] Körper: recording started.")
     }

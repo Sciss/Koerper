@@ -31,14 +31,15 @@ import de.sciss.synth.proc.{Action, Durable, Ensemble, Folder, Proc, SoundProces
 object SessionMini {
   type S = Durable
 
-  final val NameInitStop  = "stop"    // Action
-  final val NameRun       = "run"     // BooleanObj: keep iterating
-  final val NameFolderUS  = "us"      // Folder: ultra-sound
-  final val NameFolderPD  = "pd"      // Folder: probability-distribution
-  final val NameLocBase   = "base"    // ArtifactLocation
-  final val NameSphere    = "sphere"  // SphereGNG
-  final val NameAudio     = "audio"   // Ensemble
-  final val NameOsc       = "osc"     // OscNode
+  final val NameInitStop    = "stop"        // Action
+  final val NameRun         = "run"         // BooleanObj: keep iterating
+  final val NameFolderUS    = "us"          // Folder: ultra-sound
+  final val NameFolderPD    = "pd"          // Folder: probability-distribution
+  final val NameLocBase     = "base"        // ArtifactLocation
+  final val NameSphere      = "sphere"      // SphereGNG
+  final val NameAudio       = "audio"       // Ensemble
+  final val NameOsc         = "osc"         // OscNode
+  final val NameIterations  = "iterations"  // OscNode
 
   def main(args: Array[String]): Unit = {
     SoundProcesses.init()
@@ -94,9 +95,9 @@ object SessionMini {
       aO.put(OscNode.attrReceive, oscRcv)
       listB += osc
 
-      val folderUS  = Folder[S]
-      folderUS.name = NameFolderUS
-      listB += folderUS
+//      val folderUS  = Folder[S]
+//      folderUS.name = NameFolderUS
+//      listB += folderUS
       val (recChunkA, recChunkEns) = RecordAudioChunk.mkObjects()
       listB += recChunkA
       listB += recChunkEns
@@ -104,9 +105,9 @@ object SessionMini {
       listB += constQ
       val renderPD  = RenderProbabilityDistribution.mkObjects(constQ, locBase, osc)
       listB ++= renderPD
-      val folderPD  = Folder[S]
-      folderPD.name = NameFolderPD
-      listB += folderPD
+//      val folderPD  = Folder[S]
+//      folderPD.name = NameFolderPD
+//      listB += folderPD
       val sphere    = mkGNG()
       listB += sphere
 
@@ -117,6 +118,10 @@ object SessionMini {
       val ensAudio  = Ensemble[S](fAudio, offset = LongObj.newConst(0L), playing = BooleanObj.newVar(true))
       ensAudio.name = NameAudio
       listB += ensAudio
+
+      val count     = IntObj.newVar[S](0)
+      count.name    = NameIterations
+      listB += count
 
       listB.result().foreach(folder.addLast)
     }

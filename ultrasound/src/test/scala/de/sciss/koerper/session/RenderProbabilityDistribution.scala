@@ -18,7 +18,7 @@ import de.sciss.fscape.GE
 import de.sciss.fscape.lucre.{FScape, MacroImplicits}
 import de.sciss.koerper.lucre.OscNode
 import de.sciss.lucre.artifact.{Artifact, ArtifactLocation}
-import de.sciss.lucre.expr.BooleanObj
+import de.sciss.lucre.expr.{BooleanObj, IntObj}
 import de.sciss.lucre.stm.Obj
 import de.sciss.lucre.synth.Sys
 import de.sciss.osc
@@ -211,6 +211,9 @@ object RenderProbabilityDistribution {
           }
         }
       }
+
+      val IntObj.Var(count) = u.root.![IntObj]("iterations")
+      count() = count.value + 1
 
       val run = u.root.![BooleanObj]("run").value
       if (run) {
