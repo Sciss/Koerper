@@ -8,15 +8,21 @@ To contact the author, send an email to `contact at sciss.de`.
 
 Builds with sbt against Scala 2.12.
 
+## assembly
+
+    sbt clean test:assembly
+
 ## create workspace
 
     sbt clean "test:runMain de.sciss.koerper.session.SessionPi"
     
     sbt clean "test:runMain de.sciss.koerper.session.SessionMini"
 
-## assembly
+Or:
 
-    sbt clean assembly
+    java -cp koerper-ultrasound.jar de.sciss.koerper.session.SessionPi
+    
+    java -cp koerper-ultrasound.jar de.sciss.koerper.session.SessionMini
 
 ## run workspaces
 

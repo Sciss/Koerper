@@ -1,7 +1,7 @@
 lazy val baseName  = "Koerper-Ultrasound"
 lazy val baseNameL = baseName.toLowerCase
 
-lazy val projectVersion = "0.2.1-SNAPSHOT"
+lazy val projectVersion = "0.2.1"
 
 def appMainClass = Some("de.sciss.koerper.Koerper")
 
@@ -30,7 +30,8 @@ lazy val assemblySettings = Seq(
     case x =>
       val old = (assemblyMergeStrategy in assembly).value
       old(x)
-  }
+  },
+  fullClasspath in assembly := (fullClasspath in Test).value // https://github.com/sbt/sbt-assembly/issues/27
 )
 
 lazy val root = project.in(file("."))

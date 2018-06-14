@@ -15,7 +15,6 @@ package de.sciss.koerper
 package session
 
 import de.sciss.file._
-import de.sciss.fscape.lucre.FScape
 import de.sciss.koerper.Koerper.auxDir
 import de.sciss.koerper.lucre.{Eye, OscNode}
 import de.sciss.lucre.artifact.{Artifact, ArtifactLocation}
@@ -23,10 +22,10 @@ import de.sciss.lucre.expr.{DoubleObj, IntObj, LongObj, StringObj}
 import de.sciss.lucre.stm.Obj
 import de.sciss.lucre.stm.store.BerkeleyDB
 import de.sciss.osc
-import de.sciss.synth.{io, proc}
 import de.sciss.synth.proc.Implicits._
 import de.sciss.synth.proc.MacroImplicits._
 import de.sciss.synth.proc.{Action, AudioCue, Durable, SoundProcesses, Workspace}
+import de.sciss.synth.{io, proc}
 
 object SessionPi {
   type S = Durable
@@ -74,7 +73,11 @@ object SessionPi {
   def mkEye()(implicit tx: S#Tx): List[Obj[S]] = {
     val eye   = Eye[S]
     eye.name  = NameEye
-//    val aE    = eye.attr
+    val aE    = eye.attr
+    aE.put(Eye.attrFadeTime     , DoubleObj .newVar(60.0))
+    aE.put(Eye.attrPointFraction, DoubleObj .newVar( 0.8))
+    aE.put(Eye.attrMaxPoints    , IntObj    .newVar(192000))
+
 
     val osc   = OscNode[S]
     osc.name  = NameOsc

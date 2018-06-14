@@ -16,6 +16,7 @@ trait MultiAttrObserver[S <: Sys[S]] {
 
   protected def multiAttrKeys: Set[String]
 
+  /** @return `true` if the value should be observed. */
   protected def checkMultiAttrUpdate(map: EvtMap, key: String, value: Obj[S])(implicit tx: S#Tx): Boolean
 
   protected def multiAttrMap(implicit tx: S#Tx): EvtMap

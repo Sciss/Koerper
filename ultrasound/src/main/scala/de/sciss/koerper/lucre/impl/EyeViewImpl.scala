@@ -36,9 +36,12 @@ import scala.swing.{Component, Dimension, Graphics2D}
 
 object EyeViewImpl {
   def apply[S <: Sys[S]](obj: Eye[S])(implicit tx: S#Tx, cursor: stm.Cursor[S],
-                                            workspace: Workspace[S]): EyeView[S] = {
+                                      workspace: Workspace[S]): EyeView[S] = {
     new Impl[S].init(obj)
   }
+
+  private final class PdFader(val a: PD, val b: PD, val startTime: Long, val phase: Boolean,
+                              var nA: Int, var nB: Int)
 
   private final case class OscConfig(targetHost: String = Koerper.IpDavid, targetPort: Int = Koerper.OscPortDavid,
                                      localHost: String = "", localPort: Int = 0,
@@ -48,34 +51,35 @@ object EyeViewImpl {
     extends EyeView[S] with MultiAttrObserver[S] with ComponentHolder[Component] { impl =>
 
     @volatile
-    private[this] var pdRef: PD = PD.Uniform
+    private[this] var pdRef: PdFader =
+      new PdFader(PD.Uniform, PD.Uniform, startTime = System.currentTimeMillis(), phase = false,
+        nA = 1000, nB = 1000)
 
     private[this] var img: BufferedImage = _
 
-    private[this] val timerRef = Ref(Option.empty[javax.swing.Timer])
-
-    private[this] val runState = Ref(false)
+    private[this] val timerRef    = Ref(Option.empty[javax.swing.Timer])
+    private[this] val runState    = Ref(false)
+    private[this] val loadCueRef  = Ref(Option.empty[Processor[PD]])
 
     private[this] var objH: stm.Source[S#Tx, Eye[S]] = _
 
     private[this] var rotX  = 0.0
     private[this] var rotY  = 0.0
 
-    private[this] final val Pi2 = math.Pi * 2
+    private[this] final val Pi2   = math.Pi * 2
     private[this] final val rotXD = 0.023.toRadians
     private[this] final val rotYD = 0.011.toRadians
 
     private[this] val locVar = new LocVarImpl
 
-    private[this] val loadCueRef = Ref(Option.empty[Processor[PD]])
-
     private[this] final val cosTable = Array.tabulate(32768)(i => Math.cos(i * Math.PI / 65536))
 
-    private[this] final val PiH = Math.PI / 2
-
+    private[this] final val PiH   = Math.PI / 2
     private[this] final val EXT   = 480 // 1080
     private[this] final val EXTM  = EXT - 1
 
+    @volatile
+    private[this] var fadeTime = 1.0f
 
     @volatile
     private[this] var maxPoints = 1
@@ -83,8 +87,7 @@ object EyeViewImpl {
     @volatile
     private[this] var pointFraction = 1.0
 
-    @volatile
-    private[this] var N = 0
+    private[this] val rnd = new java.util.Random(pdRef.startTime)
 
     protected def multiAttrKeys: Set[String] = Eye.attrAll
 
@@ -93,12 +96,23 @@ object EyeViewImpl {
     private def mkN()(implicit tx: S#Tx, map: EvtMap): Unit = {
       maxPoints       = math.max(0, getInt(Eye.attrMaxPoints, 192000))
       pointFraction   = math.max(0.0, math.min(1.0, getDouble(Eye.attrPointFraction, 0.5)))
-      N               = pdRef match {
+      val pd0 = pdRef
+      pd0.nA                = pd0.a match {
+        case _pd: ProbDist  => math.min(maxPoints, (_pd.energy * pointFraction).toInt)
+        case _              => maxPoints
+      }
+      pd0.nB                = pd0.b match {
         case _pd: ProbDist  => math.min(maxPoints, (_pd.energy * pointFraction).toInt)
         case _              => maxPoints
       }
     }
 
+    @inline
+    private def mkFadeTime()(implicit tx: S#Tx, map: EvtMap): Unit = {
+      fadeTime = math.max(0.0f, math.min(480.0f, getDouble(Eye.attrFadeTime, 60.0).toFloat))
+    }
+
+    /** @return `true` if the value should be observed. */
     protected def checkMultiAttrUpdate(map: EvtMap, key: String, value: Obj[S])(implicit tx: S#Tx): Boolean = {
       implicit val _map: EvtMap = map
       if (key == Eye.attrTable) {
@@ -106,6 +120,9 @@ object EyeViewImpl {
         false
       } else if (key == Eye.attrMaxPoints || key == Eye.attrPointFraction) {
         mkN()
+        true
+      } else if (key == Eye.attrFadeTime) {
+        mkFadeTime()
         true
       } else {
         false
@@ -155,8 +172,15 @@ object EyeViewImpl {
         loadCueRef.set(Some(p))(tx.peer)
         import SoundProcesses.executionContext
         p.foreach { pd =>
-          pdRef = pd
-          N     = math.min(maxPoints, (pd.energy * pointFraction).toInt)
+          val pd0 = pdRef
+          val t   = System.currentTimeMillis()
+          val n   = math.min(maxPoints, (pd.energy * pointFraction).toInt)
+          val pd1 = if (pd0.phase) {
+            new PdFader(pd0.a, pd, t, phase = false, nA = pd0.nA, nB = n)
+          } else {
+            new PdFader(pd, pd0.b, t, phase = true , nA = n, nB = pd0.nB)
+          }
+          pdRef   = pd1
         }
         p.onComplete { _ =>
           atomic { implicit tx =>
@@ -175,6 +199,7 @@ object EyeViewImpl {
 
       updateCue()
       mkN()
+      mkFadeTime()
       this
     }
 
@@ -215,15 +240,23 @@ object EyeViewImpl {
       g.setColor(Color.black)
       g.fillRect(0, 0, EXT, EXT)
       g.setColor(Color.white)
-      val _N = N
+      val pd  = pdRef
       var i = 0
       val _rotX = rotX
       val _rotY = rotY
       val _loc = locVar
 //      val _oval = oval
-      val pd = pdRef
+      val pdA = if (pd.phase) pd.a  else pd.b
+      val pdB = if (pd.phase) pd.b  else pd.a
+      val nA  = if (pd.phase) pd.nA else pd.nB
+      val nB  = if (pd.phase) pd.nB else pd.nA
+      val t1  = System.currentTimeMillis()
+      val pw  = math.max(0.0f, math.min(1.0f, (t1 - pd.startTime) * 0.001f / fadeTime))
+      val _N  = (nA * pw + nB * (1 - pw)).toInt
+
       while (i < _N) {
-        pd.poll(_loc)
+        val pd1 = if (rnd.nextFloat() < pw) pdA else pdB
+        pd1.poll(_loc)
         val sinTheta = sinF(_loc.theta)
         val x0 = sinTheta * cosF(_loc.phi)
         val y0 = sinTheta * sinF(_loc.phi)

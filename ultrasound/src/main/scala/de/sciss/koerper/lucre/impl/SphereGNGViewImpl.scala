@@ -409,7 +409,7 @@ object SphereGNGViewImpl {
           case pd: ProbDist =>
             s"Energy: ${pd.energy}"
           case _ =>
-            "(not ProbDist"
+            "(not ProbDist)"
         }
         println(energyInfo)
       }
