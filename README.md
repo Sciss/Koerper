@@ -11,3 +11,8 @@ Artistic research process: https://www.researchcatalogue.net/view/432898/432899
 - `webcam` : experiments with a tiny USB camera, preparing for the 'wooden head' module
 - `ultrasound` : the audio visual installation based on a 'fish trap body' and ultra-sound sensors
 
+## 'Modules'
+
+- alpha: corresponds with sbt project 'ultrasound'
+- beta: corresponds with the eponymous sbt project
+
