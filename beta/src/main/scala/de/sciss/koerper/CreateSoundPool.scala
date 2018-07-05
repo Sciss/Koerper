@@ -23,13 +23,13 @@ import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
 object CreateSoundPool {
+  def main(args: Array[String]): Unit = {
+    findEmptySpots()
+  }
+
   def mkInputIterator(): Iterator[File] = {
     val url = this.getClass.getResource("/InputSounds.txt")
     io.Source.fromURL(url, "UTF-8").getLines().map(file)
-  }
-
-  def main(args: Array[String]): Unit = {
-    findAllSpots()
   }
 
   def validateList(): Unit = {
@@ -85,14 +85,56 @@ object CreateSoundPool {
     println("Done.")
   }
 
+  val tempSpotOut: File = file("/data") / "projects" / "Koerper" / "audio_work" / "beta-spots" / "beta-spot-%d.aif"
+
+  def findEmptySpots(): Unit = {
+    val minLen = (2.5 * 44100).toLong
+    var bad = Set.empty[Int]
+    Iterator.from(1).map(formatTemplate(tempSpotOut, _)).takeWhile(_.exists()).zipWithIndex.foreach { case (f, idx) =>
+      val idxIn = idx/3 + 1
+      val n = s"${f.name} ($idxIn)"
+      def bail(msg: String): Unit = {
+        bad += idxIn
+        println(msg)
+      }
+      try {
+        val af = AudioFile.openRead(f)
+        try {
+          if (af.numFrames < minLen) {
+            bail(s"TOO SHORT: $n")
+          } else {
+            val len = af.numFrames.toInt
+            val b = af.buffer(len)
+            af.read(b)
+            import numbers.Implicits._
+            val rms = (b(0).iterator.map(_.squared).sum / len).sqrt.ampDb
+            if (rms < -80) {
+              bail(f"TOO QUIET ($rms%g dB RMS): $n")
+            } else if (rms > -3) {
+              bail(f"TOO LOUD ($rms%g dB RMS): $n")
+            } else if (rms.isNaN) {
+              bail(s"HAS NANS: $n")
+            }
+          }
+        } finally {
+          af.cleanUp()
+        }
+      } catch {
+        case NonFatal(_) =>
+          bail(s"NOT READABLE: $n")
+      }
+    }
+
+    println(bad.toList.sorted.mkString("\nBAD SET: ", ", ", ""))
+  }
+
   def findAllSpots(): Unit = {
     val pqSize  = 3
     val rnd     = new scala.util.Random(2187)
-    val tempOut = file("/data") / "projects" / "Koerper" / "audio_work" / "beta-spots" / "beta-spot-%d.aif"
     mkInputIterator().zipWithIndex.foreach { case (fIn, idx) =>
       val fOut = List.tabulate(pqSize) { sliceIdx =>
         val idxOut = idx * pqSize + sliceIdx + 1
-        formatTemplate(tempOut, idxOut)
+        formatTemplate(tempSpotOut, idxOut)
       }
       import numbers.Implicits._
       val cutDur = rnd.nextDouble().linLin(0, 1, minCutDur, maxCutDur)
