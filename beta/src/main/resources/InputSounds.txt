@@ -10,7 +10,6 @@
 /media/hhrutz/Mnemo3/CDs/Msc160102_1/AnemoneActiniaria/AnemoneCUBE_150123_19h03.aif
 /media/hhrutz/Mnemo3/CDs/Msc160102_1/KonfabulousSchmilblick/recordings/KonfabulousSchmilblick150220_12h17.aif
 /media/hhrutz/Mnemo3/CDs/Misc160101_2/KonfabulousSchmilblick/recordings/julie150220_2.aif
-/media/hhrutz/Mnemo3/CDs/Misc160101_2/FaedenZiehen_Interface3/audio_work/work2/ThirtyTreeWTWhiteWTBack-1.aif
 /media/hhrutz/Mnemo3/CDs/Misc160101_1/AtelierAllstars151218_22h54_16b.aif
 /media/hhrutz/Mnemo3/CDs/Misc160101_1/MutagenTx/mentasm-42c6405HPF.aif
 /media/hhrutz/Mnemo3/CDs/Misc160101_1/HMSS/KoelnOkt09/rec/HMMS_Nocturne_091022_Stueck1.aif
