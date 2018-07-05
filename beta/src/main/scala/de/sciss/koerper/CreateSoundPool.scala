@@ -14,9 +14,12 @@
 package de.sciss.koerper
 
 import de.sciss.file._
-import de.sciss.synth.io.AudioFile
+import de.sciss.numbers
+import de.sciss.synth.io.{AudioFile, AudioFileSpec}
 
 import scala.collection.mutable
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration.Duration
 import scala.util.control.NonFatal
 
 object CreateSoundPool {
@@ -26,7 +29,7 @@ object CreateSoundPool {
   }
 
   def main(args: Array[String]): Unit = {
-    validateList()
+    findAllSpots()
   }
 
   def validateList(): Unit = {
@@ -68,5 +71,96 @@ object CreateSoundPool {
         case NonFatal(_) => println(s"INVALID FILE: $f")
       }
     }
+  }
+
+  final val minCutDur   = 5.0
+  final val maxCutDur   = 8.0
+
+  def findSpotsTest(): Unit = {
+    val fIn     = file("/media/hhrutz/Mnemo3/hh_sounds/MiscZeven_Fahrrad.aif")
+    val cutDur  = 6.0
+    val fOut    = List.tabulate(3)(i => file(s"/data/temp/test-${i + 1}.aif"))
+    val fut     = extractSpots(fIn = fIn, fOut = fOut, cutDur = cutDur)
+    Await.result(fut, Duration.Inf)
+    println("Done.")
+  }
+
+  def findAllSpots(): Unit = {
+    val pqSize  = 3
+    val rnd     = new scala.util.Random(2187)
+    val tempOut = file("/data") / "projects" / "Koerper" / "audio_work" / "beta-spots" / "beta-spot-%d.aif"
+    mkInputIterator().zipWithIndex.foreach { case (fIn, idx) =>
+      val fOut = List.tabulate(pqSize) { sliceIdx =>
+        val idxOut = idx * pqSize + sliceIdx + 1
+        formatTemplate(tempOut, idxOut)
+      }
+      import numbers.Implicits._
+      val cutDur = rnd.nextDouble().linLin(0, 1, minCutDur, maxCutDur)
+      if (fOut.exists(!_.exists())) {
+        val fut     = extractSpots(fIn = fIn, fOut = fOut, cutDur = cutDur)
+        Await.result(fut, Duration.Inf)
+        println(s"Done ${idx + 1}.")
+      }
+    }
+  }
+
+  def formatTemplate(f: File, args: Any*): File = {
+    val name = f.name.format(args: _*)
+    f.replaceName(name)
+  }
+
+  def extractSpots(fIn: File, fOut: List[File], cutDur: Double): Future[Unit] = {
+    require(cutDur >= minCutDur && cutDur <= maxCutDur)
+
+    import de.sciss.fscape._
+    import graph._
+
+//    val fIn     = file("/media/hhrutz/Mnemo3/hh_sounds/Betanovuss150410_1.aif")
+    val specIn  = AudioFile.readSpec(fIn)
+
+    val g = Graph {
+      val sr          = 44100.0
+      val highPass    = 100.0
+
+      val numFrames   = math.min(specIn.numFrames, (sr * 60 * 30).toLong) // 30 minutes
+      def mkIn(): GE = {
+        val in0         = AudioFileIn(fIn, numChannels = specIn.numChannels)
+        val in1         = if (specIn.numChannels == 1) in0 else in0.out(0)
+        val in2         = if (specIn.numFrames == numFrames) in1 else in1.take(numFrames)
+        HPF(in2, highPass / sr)
+      }
+      val in          = mkIn()
+      val winSize     = sr.toInt
+      val stepSize    = winSize / 4
+      val lap         = Sliding(in, winSize, stepSize)
+      val loud        = Loudness(lap, sampleRate = sr, size = winSize)
+      val numLoud     = ((numFrames + stepSize - 1) / stepSize).toInt
+      val maxSize     = (sr * 3 / stepSize).toInt
+      val dropRight   = (sr * maxCutDur / stepSize).toInt
+      val takeLoud    = numLoud - dropRight
+      val isLocalMax  = DetectLocalMax(loud, size = maxSize).take(takeLoud)
+      val loudIdx     = Frames(loud)
+      val pqSize      = fOut.size // 3
+      val pq          = PriorityQueue(keys = loud * isLocalMax, values = loudIdx, size = pqSize)
+      val offsets     = pq * stepSize
+
+      for (sliceIdx <- 0 until pqSize) {
+        val inCopy    = mkIn()
+        val start     = {
+          val tmp = if (sliceIdx == 0) offsets else offsets.drop(sliceIdx)
+          tmp.take(1)
+        }
+//        start.poll(0, s"start-${sliceIdx + 1}")
+        val stop      = start + (cutDur * sr).toLong
+        val slice     = Slices(inCopy, spans = start ++ stop)
+        val sig       = slice // XXX TODO --- create minimum phase version
+        val fOutI     = fOut(sliceIdx)
+        AudioFileOut(fOutI, AudioFileSpec(numChannels = 1, sampleRate = sr), in = sig)
+      }
+    }
+
+    val ctl = stream.Control()
+    ctl.run(g)
+    ctl.status
   }
 }
