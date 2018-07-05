@@ -242,86 +242,73 @@ object CreateSoundPool {
 
     val g = Graph {
       val sr          = 44100.0
-      val fftSize     = specIn.numFrames.toInt.nextPowerOfTwo // * 2
+      val highPass    = 50.0
+      val numFramesIn = specIn.numFrames.toInt
+      val fftSize     = numFramesIn.nextPowerOfTwo * 2
       val in          = AudioFileIn(fIn, numChannels = 1) // ++ DC(0).take(fftSize - specIn.numFrames)
-      val fft         = Real1FullFFT(in = in, size = fftSize)
-      val logC        = fft.complex.log.max(-100) // (-80)
+      val inR         = HPF(in, highPass/sr) // RotateWindow(in, fftSize, fftSize/2)
+      val fft         = Real1FullFFT(in = inR, size = fftSize)
+      val logC0       = fft.complex.log // .max(-100) // (-80)
+
+      // unwrap phases is _not_ needed
+
+//      val logC = {
+//        val mag     = logC0.complex.real
+//        val phase0  = logC0.complex.phase
+//        val phaseD  = Biquad(phase0, b0 = 1, b1 = -1)
+//        val dn      = phaseD > +math.Pi
+//        val up      = phaseD < -math.Pi
+//        val phaseA  = up * math.Pi - dn * math.Pi
+//        val phase   = phase0 + phaseA
+//        mag zip phase
+//      }
+
+      val logC = logC0
+
       val cep         = Complex1IFFT(in = logC, size = fftSize) / fftSize
       val cepOut      = FoldCepstrum(in = cep, size = fftSize,
         crr = +1, cri = +1, clr = 0, cli = 0,
         ccr = +1, cci = -1, car = 0, cai = 0)
 
-      /*
-      var i = 2
-      var j = szC - 2
-      while (i < sz) {
-        val reL = arr(i)
-        val reR = arr(j)
-        arr(i) = crr * reL + ccr * reR
-        arr(j) = clr * reR + car * reL
-        val imL = arr(i + 1)
-        val imR = arr(j + 1)
-        arr(i + 1) = cri * imL + cci * imR
-        arr(j + 1) = cli * imR + cai * imL
-        i += 2
-        j -= 2
-      }
+     val freq        = Complex1FFT(in = cepOut, size = fftSize) * fftSize
+      val fftOut      = freq.complex.exp
 
-crr = 1
-ccr = 1
-clr = 0
-car = 0 or 1
-
-cri = 1
-cci = -1
-cli = 0
-cai = 0 or -1
-
-    crr = +1, cri = +1,
-    clr =  0, cli =  0,
-    ccr = +1, cci = -1,
-    car = +1, cai = -1,
-
-
-       */
-
-
-      /*
-        // fold cepstrum (make anticausal parts causal)
-        for( int j = 2, k = complexFFTsize - 2; j < fftLength; j += 2, k -= 2 ) {
-            convBuf1[ j ]   += convBuf1[ k ];		// add conjugate left wing to right wing
-            convBuf1[ j+1 ] -= convBuf1[ k+1 ];
-        }
-        convBuf1[ fftLength + 1 ] = -convBuf1[ fftLength + 1 ];
-        // clear left wing
-        for( int j = fftLength + 2; j < complexFFTsize; j++ ) {
-            convBuf1[ j ] = 0.0f;
-        }
-
-       */
+      val outW        = Real1FullIFFT (in = fftOut, size = fftSize)
+      val outWR       = outW.take(numFramesIn) // RotateWindow(outW, fftSize, fftSize/2)
+      val convSize    = (numFramesIn + numFramesIn - 1).nextPowerOfTwo
+      val conv1       = Real1FFT(outWR, size = convSize, mode = 1)
+      val conv2       = conv1.complex.squared
+      val conv3       = Real1IFFT(conv2, size = convSize, mode = 1)
+//      val conv3       = outWR
+      val outLen      = numFramesIn + numFramesIn - 1
+      val convOut     = conv3.take(outLen)
 
       def normalize(in: GE): GE = {
         val max       = RunningMax(in.abs).last
-        max.ampDb.poll(0, "max [dB]")
+//        max.ampDb.poll(0, "max [dB]")
         val headroom  = -0.2.dbAmp
         val gain      = max.reciprocal * headroom
         val buf       = BufferDisk(in)
-        val sig       = buf * gain
+        val sig0      = buf * gain
+        val spl       = 55
+        val ref       = 32
+//        val loud      = Loudness(sig0, sampleRate = sr, size = outLen, spl = spl)
+        val loud0     = Loudness(sig0, sampleRate = sr, size = sr/4, spl = spl)
+        val loud      = RunningMax(loud0).last
+//        Length(loud).poll(0, "NUM-LOUD")
+        loud.poll(0, s"LOUD-0 $fOut")
+        val buf1      = BufferDisk(buf)
+        val gain1     = (-(loud.max(ref)) + ref).dbAmp.pow(0.6) * gain  // 0.7 -- some good guess for phon <-> dB
+//        gain1.poll(0, s"GAIN $fOut")
+        val sig       = buf1 * gain1
+        val loud00    = Loudness(sig, sampleRate = sr, size = sr/4, spl = spl)
+        val loud1     = RunningMax(loud00).last
+//        val loud1     = Loudness(sig, sampleRate = sr, size = outLen, spl = spl)
+        loud1.poll(0, s"LOUD-1 $fOut")
         sig
       }
 
-      val freq        = Complex1FFT(in = cepOut, size = fftSize) * fftSize
-      val fftOut      = freq.complex.exp
-
-//      val self        = fftOut // .complex.squared
-
-      val outW        = Real1FullIFFT (in = fftOut, size = fftSize)
-//      val convSize    = fftSize * 2
-//      val conv1       = Real1FFT(outW, size = convSize, mode = 1)
-//      val conv2       = conv1.complex.squared
-//      val conv3       = Real1IFFT(conv2, size = convSize, mode = 1)
-      val conv3       = outW
-      val sig         = normalize(conv3)
+      val sig         = normalize(convOut)
 
       val specOut     = AudioFileSpec(numChannels = 1, sampleRate = sr, sampleFormat = SampleFormat.Int24)
       AudioFileOut(fOut, specOut, in = sig)
