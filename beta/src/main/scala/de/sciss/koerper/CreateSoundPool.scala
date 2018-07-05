@@ -15,7 +15,7 @@ package de.sciss.koerper
 
 import de.sciss.file._
 import de.sciss.numbers
-import de.sciss.synth.io.{AudioFile, AudioFileSpec}
+import de.sciss.synth.io.{AudioFile, AudioFileSpec, SampleFormat}
 
 import scala.collection.mutable
 import scala.concurrent.{Await, Future}
@@ -25,7 +25,9 @@ import scala.util.control.NonFatal
 object CreateSoundPool {
   def main(args: Array[String]): Unit = {
 //    findAllSpots()
-    findEmptySpots()
+//    findEmptySpots()
+//    minPhaseTest()
+    mkAllMinPhase()
   }
 
   def mkInputIterator(): Iterator[File] = {
@@ -86,12 +88,25 @@ object CreateSoundPool {
     println("Done.")
   }
 
-  val tempSpotOut: File = file("/data") / "projects" / "Koerper" / "audio_work" / "beta-spots" / "beta-spot-%d.aif"
+  def minPhaseTest(): Unit = {
+    val fIn     = file("/data/projects/Koerper/audio_work/beta-spots/beta-spot-1.aif")
+    val fOut    = file("/data/temp/test-min-phase.aif")
+    val fut     = mkMinPhase(fIn = fIn, fOut = fOut)
+    Await.result(fut, Duration.Inf)
+    println("Done.")
+  }
+
+  val audioWork   : File  = file("/data") / "projects" / "Koerper" / "audio_work"
+  val tempSpotOut : File  = audioWork / "beta-spots" / "beta-spot-%d.aif"
+  val tempPhaseOut: File  = audioWork / "beta-phase" / "beta-phase-%d.aif"
+
+  def mkSpotIterator(): Iterator[(File, Int)] =
+    Iterator.from(1).map(formatTemplate(tempSpotOut, _)).takeWhile(_.exists()).zipWithIndex
 
   def findEmptySpots(): Unit = {
     val minLen = (2.5 * 44100).toLong
     var bad = Set.empty[Int]
-    Iterator.from(1).map(formatTemplate(tempSpotOut, _)).takeWhile(_.exists()).zipWithIndex.foreach { case (f, idx) =>
+    mkSpotIterator().foreach { case (f, idx) =>
       val idxIn = idx/3 + 1
       val n = s"${f.name} ($idxIn)"
       def bail(msg: String): Unit = {
@@ -141,6 +156,17 @@ object CreateSoundPool {
       val cutDur = rnd.nextDouble().linLin(0, 1, minCutDur, maxCutDur)
       if (fOut.exists(!_.exists())) {
         val fut     = extractSpots(fIn = fIn, fOut = fOut, cutDur = cutDur)
+        Await.result(fut, Duration.Inf)
+        println(s"Done ${idx + 1}.")
+      }
+    }
+  }
+
+  def mkAllMinPhase(): Unit = {
+    mkSpotIterator().foreach { case (fIn, idx) =>
+      val fOut = formatTemplate(tempPhaseOut, idx + 1)
+      if (!fOut.exists()) {
+        val fut = mkMinPhase(fIn = fIn, fOut = fOut)
         Await.result(fut, Duration.Inf)
         println(s"Done ${idx + 1}.")
       }
@@ -200,6 +226,105 @@ object CreateSoundPool {
         val fOutI     = fOut(sliceIdx)
         AudioFileOut(fOutI, AudioFileSpec(numChannels = 1, sampleRate = sr), in = sig)
       }
+    }
+
+    val ctl = stream.Control()
+    ctl.run(g)
+    ctl.status
+  }
+
+  def mkMinPhase(fIn: File, fOut: File): Future[Unit] = {
+    import numbers.Implicits._
+    import de.sciss.fscape._
+    import graph._
+
+    val specIn  = AudioFile.readSpec(fIn)
+
+    val g = Graph {
+      val sr          = 44100.0
+      val fftSize     = specIn.numFrames.toInt.nextPowerOfTwo // * 2
+      val in          = AudioFileIn(fIn, numChannels = 1) // ++ DC(0).take(fftSize - specIn.numFrames)
+      val fft         = Real1FullFFT(in = in, size = fftSize)
+      val logC        = fft.complex.log.max(-100) // (-80)
+      val cep         = Complex1IFFT(in = logC, size = fftSize) / fftSize
+      val cepOut      = FoldCepstrum(in = cep, size = fftSize,
+        crr = +1, cri = +1, clr = 0, cli = 0,
+        ccr = +1, cci = -1, car = 0, cai = 0)
+
+      /*
+      var i = 2
+      var j = szC - 2
+      while (i < sz) {
+        val reL = arr(i)
+        val reR = arr(j)
+        arr(i) = crr * reL + ccr * reR
+        arr(j) = clr * reR + car * reL
+        val imL = arr(i + 1)
+        val imR = arr(j + 1)
+        arr(i + 1) = cri * imL + cci * imR
+        arr(j + 1) = cli * imR + cai * imL
+        i += 2
+        j -= 2
+      }
+
+crr = 1
+ccr = 1
+clr = 0
+car = 0 or 1
+
+cri = 1
+cci = -1
+cli = 0
+cai = 0 or -1
+
+    crr = +1, cri = +1,
+    clr =  0, cli =  0,
+    ccr = +1, cci = -1,
+    car = +1, cai = -1,
+
+
+       */
+
+
+      /*
+        // fold cepstrum (make anticausal parts causal)
+        for( int j = 2, k = complexFFTsize - 2; j < fftLength; j += 2, k -= 2 ) {
+            convBuf1[ j ]   += convBuf1[ k ];		// add conjugate left wing to right wing
+            convBuf1[ j+1 ] -= convBuf1[ k+1 ];
+        }
+        convBuf1[ fftLength + 1 ] = -convBuf1[ fftLength + 1 ];
+        // clear left wing
+        for( int j = fftLength + 2; j < complexFFTsize; j++ ) {
+            convBuf1[ j ] = 0.0f;
+        }
+
+       */
+
+      def normalize(in: GE): GE = {
+        val max       = RunningMax(in.abs).last
+        max.ampDb.poll(0, "max [dB]")
+        val headroom  = -0.2.dbAmp
+        val gain      = max.reciprocal * headroom
+        val buf       = BufferDisk(in)
+        val sig       = buf * gain
+        sig
+      }
+
+      val freq        = Complex1FFT(in = cepOut, size = fftSize) * fftSize
+      val fftOut      = freq.complex.exp
+
+//      val self        = fftOut // .complex.squared
+
+      val outW        = Real1FullIFFT (in = fftOut, size = fftSize)
+//      val convSize    = fftSize * 2
+//      val conv1       = Real1FFT(outW, size = convSize, mode = 1)
+//      val conv2       = conv1.complex.squared
+//      val conv3       = Real1IFFT(conv2, size = convSize, mode = 1)
+      val conv3       = outW
+      val sig         = normalize(conv3)
+
+      val specOut     = AudioFileSpec(numChannels = 1, sampleRate = sr, sampleFormat = SampleFormat.Int24)
+      AudioFileOut(fOut, specOut, in = sig)
     }
 
     val ctl = stream.Control()
