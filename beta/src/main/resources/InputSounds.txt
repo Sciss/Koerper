@@ -184,7 +184,7 @@
 /media/hhrutz/Mnemo3/CDs/MachinaeCoelestis131229_1/audio_work/edit/Sheep130802_191337_Cut030.aif
 /media/hhrutz/Mnemo3/CDs/MachinaeCoelestis131229_1/audio_work/edit/GruonGene_E3ConFchtT'MWhte.aif
 /media/hhrutz/Mnemo3/CDs/MachinaeCoelestis131229_1/audio_work/edit/OrdingBuhneTauben081230HPFCut.aif
-/media/hhrutz/Mnemo3/CDs/MachinaeCoelestis131229_1/audio_work/edit/Drm13'IchWTConDrm13'FrBckWhite.aif
+/media/hhrutz/Mnemo3/CDs/Misc091021_1/SalonBruitOct09/Rec/FormvollendetLifeloopMangroveSciss_atSB_091009.aif
 /media/hhrutz/Mnemo3/CDs/MachinaeCoelestis131229_1/audio_work/field_rec/JudenburgSirene130803_kurzVor12.aif
 /media/hhrutz/Mnemo3/CDs/MachinaeCoelestis131229_1/audio_work/edit/SeleniumDubEditColrWhiteHPFSchizo.aif
 /media/hhrutz/Mnemo3/CDs/MachinaeCoelestis131229_1/audio_work/edit/080309_222010_ParaguanaPosadaATCutRsmpEQ.aif
@@ -209,7 +209,7 @@
 /media/hhrutz/Mnemo3/CDs/Indeterminus131229_2/hhrutz/Mnemo/Misc130428_5_sel/tapes/SaatchiInstallation+Rvs.aif
 /media/hhrutz/Mnemo3/CDs/Indeterminus131229_2/hhrutz/Mnemo/Misc130428_1/BWFF/InsideCarRain120414_135604.aif
 /media/hhrutz/Mnemo3/CDs/Indeterminus131229_2/hhrutz/Mnemo/Misc130428_1/BWFF/IrelandDolanMetalGateAelusHarp120422_115819.aif
-/media/hhrutz/Mnemo3/CDs/Indeterminus131229_2/hhrutz/Mnemo/Misc130428_1/InterPlay130428_1/rec/mitschnitt/rec120219_184205.aif
+/media/hhrutz/Mnemo3/CDs/Amplifikation090921_1/tapes/TexteMic.aif
 /media/hhrutz/Mnemo3/CDs/Indeterminus131229_1/hhrutz/experiments/_fsc7VDisk.aif
 /media/hhrutz/Mnemo3/CDs/Indeterminus131229_1/hhrutz/experiments/|fsc9CutVDisk.aif
 /media/hhrutz/Mnemo3/CDs/Indeterminus131229_1/hhrutz/edits/rec110131_214834Cut.aif
@@ -222,7 +222,7 @@
 /media/hhrutz/Mnemo3/CDs/Indeterminus131229_1/hhrutz/edits/ScissLiveAtCafeConcrete110627_224059Cut.aif
 /media/hhrutz/Mnemo3/CDs/Indeterminus131229_1/hhrutz/experiments/01StS'nFlt4Op01StS'CnFlt4CtAsyncCutRsmp.aif
 /media/hhrutz/Mnemo3/CDs/Indeterminus131229_1/hhrutz/edits/ScissLeipzigTeil3TestHPCutRsmpHlbFrzChbyStCut.aif
-/media/hhrutz/Mnemo3/CDs/Misc130428_10/ConcertScissHennigEtAlM89_111221/20111221M89_s02_2135.aif
+/media/hhrutz/Mnemo3/CDs/Amplifikation090921_1/tapes/Bronze2 denSt.aif
 /media/hhrutz/Mnemo3/CDs/Misc130428_10/Staircase130428_2/audio_work/twelveCut.aif
 /media/hhrutz/Mnemo3/CDs/Misc130428_10/Staircase130428_2/audio_work/Scherben1_1+3.aif
 /media/hhrutz/Mnemo3/CDs/Misc130428_10/Staircase130428_2/kontur/StaircaseBounce.aif
@@ -285,7 +285,7 @@
 /media/hhrutz/Mnemo3/CDs/Misc130428_4/Feuchtigkeit/audio_work/work/WaterContainer3Gestures.aif
 /media/hhrutz/Mnemo3/CDs/Misc130428_4/Feuchtigkeit/audio_work/work/WaterContainer6Gestures.aif
 /media/hhrutz/Mnemo3/CDs/Misc130428_4/Feuchtigkeit/audio_work/work/WaterContainer3MRsmpExcHP.aif
-/media/hhrutz/Mnemo3/CDs/Misc130428_4/Feuchtigkeit/audio_work/work/2010102sciss_attic_02_2128-1.aif
+/media/hhrutz/Mnemo3/CDs/Amplifikation090921_1/tapes/Blechregal1Test.aif
 /media/hhrutz/Mnemo3/CDs/Misc130428_4/Feuchtigkeit/audio_work/work/ScissLeipzigTeil3TestHPCutRsmpFrz.aif
 /media/hhrutz/Mnemo3/CDs/Misc130428_4/Feuchtigkeit/audio_work/work/ScissLeipzigTeil3TestHPCutRsmpHlbFrzChby.aif
 /media/hhrutz/Mnemo3/CDs/Misc130428_3/ScissLiveAtCafeConcrete110627_224059.aif
@@ -333,7 +333,7 @@
 /media/hhrutz/Mnemo3/CDs/Misc130428_1/BWFF/WitchcraftMuseumBoscastleAleisterCrowley120414_154519.aif
 /media/hhrutz/Mnemo3/CDs/Misc130428_1/InterPlay130428_1/rec/mitschnitt/rec111202_124204.aif
 /media/hhrutz/Mnemo3/CDs/Misc130428_1/InterPlay130428_1/rec/mitschnitt/rec120219_201940.aif
-/media/hhrutz/Mnemo3/CDs/Sliding130428_2/audio_work/render/Sliding_kontur2.aif
+/media/hhrutz/Mnemo3/CDs/Amplifikation090921_1/tapes/Blechregal2Test.aif
 /media/hhrutz/Mnemo3/CDs/Sliding130428_1/audio_work/inside/Inside130204_084949Ed.aif
 /media/hhrutz/Mnemo3/CDs/Sliding130428_1/audio_work/inside/Inside130204_095159Ed.aif
 /media/hhrutz/Mnemo3/CDs/Sliding130428_1/audio_work/outside/Outside130201_115017Ed.aif
@@ -383,7 +383,7 @@
 /media/hhrutz/Mnemo3/CDs/Diss110622/diss/ICMC2011/RandomAccess/sound_examples/interp_10s_v3.aif
 /media/hhrutz/Mnemo3/CDs/Diss110622/diss/ICMC2011/RandomAccess/sound_examples/interp_10s_v4.aif
 /media/hhrutz/Mnemo3/CDs/Diss110622/diss/ICMC2011/RandomAccess/sound_examples/InterpOrigPulse.aif
-/media/hhrutz/Mnemo3/CDs/Diss110622/diss/ICMC2011/RandomAccess/sound_examples/InterpXOrigFreqSin.aif
+/media/hhrutz/Mnemo3/CDs/Amplifikation090921_1/tapes/Blechregal3Test.aif
 /media/hhrutz/Mnemo3/CDs/InterPlayReSoundLighthouse110622/Lighthouse/bounces/Test1a.aif
 /media/hhrutz/Mnemo3/CDs/InterPlayReSoundLighthouse110622/Lighthouse/audio_work/ClaustroBounce.aif
 /media/hhrutz/Mnemo3/CDs/InterPlayReSoundLighthouse110622/Lighthouse/audio_work/Lighthouse9Cut.aif
@@ -414,10 +414,10 @@
 /media/hhrutz/Mnemo3/CDs/InterPlayReSound110621_1/rec/StringsDirect/FlageoMitKabelbinderT.aif
 /media/hhrutz/Mnemo3/CDs/InterPlayReSound110621_1/rec/StringsDirect/UnrelatedOutsideNoise.aif
 /media/hhrutz/Mnemo3/CDs/InterPlayReSound110621_1/rec/from_R/L/SC_101207_214144.aif
-/media/hhrutz/Mnemo3/CDs/HKMScissBremen110621/MitschnittBremen/HKM+Bremen101223_Set2.aif
+/media/hhrutz/Mnemo3/CDs/Amplifikation090921_1/tapes/Blechregal4Test.aif
 /media/hhrutz/Mnemo3/CDs/Misc110621_2/cillo_samples/Demo-1.aif
 /media/hhrutz/Mnemo3/CDs/Misc110621_2/cillo_samples/bounce1.aif
-/media/hhrutz/Mnemo3/CDs/Misc110621_2/DinciseHennigKocherScissL129/rec/|fsc4.aif
+/media/hhrutz/Mnemo3/CDs/Amplifikation090921_1/tapes/Blechregal5Test.aif
 /media/hhrutz/Mnemo3/CDs/Misc110621_2/DinciseHennigKocherScissL129/rec/fscin1.aif
 /media/hhrutz/Mnemo3/CDs/Misc110621_2/DinciseHennigKocherScissL129/rec/fscin3.aif
 /media/hhrutz/Mnemo3/CDs/Misc110621_2/DinciseHennigKocherScissL129/rec/fscin5.aif
@@ -440,7 +440,7 @@
 /media/hhrutz/Mnemo3/CDs/Misc110621_1/FieldRecordings/VogelparkWalsrode110513_9.aif
 /media/hhrutz/Mnemo3/CDs/Misc110621_1/FieldRecordings/VogelparkWalsrode110513_10.aif
 /media/hhrutz/Mnemo3/CDs/Misc110621_1/FieldRecordings/VogelparkWalsrodeTuer110513.aif
-/media/hhrutz/Mnemo3/CDs/Misc110621_1/HMSS_MEX/rec/_fsc10.aif
+/media/hhrutz/Mnemo3/CDs/Amplifikation090921_1/tapes/Blechregal6Test.aif
 /media/hhrutz/Mnemo3/CDs/Misc110621_1/HMSS_MEX/rec/fscin3.aif
 /media/hhrutz/Mnemo3/CDs/Misc110621_1/HMSS_MEX/rec/fscin10.aif
 /media/hhrutz/Mnemo3/CDs/Misc110621_1/HMSS_MEX/rec/fscin12.aif
@@ -501,7 +501,7 @@
 /media/hhrutz/Mnemo3/CDs/Misc101123_1/UnknownSCRecordings/SC_070331_142645.aif
 /media/hhrutz/Mnemo3/CDs/Misc101123_1/UnknownSCRecordings/SC_071211_231817.aif
 /media/hhrutz/Mnemo3/CDs/Misc101123_1/UnknownSCRecordings/SC_071212_002828.aif
-/media/hhrutz/Mnemo3/CDs/Misc101123_1/UnknownSCRecordings/SC_071215_002328.aif
+/media/hhrutz/Mnemo3/CDs/Amplifikation090921_1/tapes/HeizungQuadTest.aif
 /media/hhrutz/Mnemo3/CDs/Misc101123_1/DevonCornwallSummer0201/TateSaintYves100614.aif
 /media/hhrutz/Mnemo3/CDs/Misc101123_1/DevonCornwallSummer0201/Dartmoor100710_135021.aif
 /media/hhrutz/Mnemo3/CDs/Misc101123_1/DevonCornwallSummer0201/Dartmoor100710_142005.aif
@@ -540,7 +540,7 @@
 /media/hhrutz/Mnemo3/CDs/Dissemination100929_1/inject/0/inject00186.aif
 /media/hhrutz/Mnemo3/CDs/Dissemination100929_1/inject/0/inject00304.aif
 /media/hhrutz/Mnemo3/CDs/Dissemination100929_1/inject/4/inject00004.aif
-/media/hhrutz/Mnemo3/CDs/Dissemination100929_1/inject/4/inject00327.aif
+/media/hhrutz/Mnemo3/CDs/Amplifikation090921_1/tapes/TramDepotRainEd.aif
 /media/hhrutz/Mnemo3/CDs/Dissemination100929_1/inject/4/inject00384.aif
 /media/hhrutz/Mnemo3/CDs/Misc100317_2/tapes/Bronze1CutLp.aif
 /media/hhrutz/Mnemo3/CDs/Misc100317_2/tapes/Papier1 denSt.aif
@@ -594,10 +594,10 @@
 /media/hhrutz/Mnemo3/CDs/FaedenZiehen100317_2/Interface3/stereo/Atmo090525_145347Cut.aif
 /media/hhrutz/Mnemo3/CDs/FaedenZiehen100317_2/Interface3/stereo/DienstbarAccumRsmpExc.aif
 /media/hhrutz/Mnemo3/CDs/FaedenZiehen100317_2/Interface3/stereo/RaumerDachEQWrpAmpCut.aif
-/media/hhrutz/Mnemo3/CDs/FaedenZiehen100317_2/Interface3/sweeps/_killmeConSwp10'dryrv.aif
-/media/hhrutz/Mnemo3/CDs/FaedenZiehen100317_2/Interface3/sweeps/_killme2ConSwp10'dryrv.aif
+/media/hhrutz/Mnemo3/CDs/Amplifikation090920_2/audio_work/ScanP1H.aif
+/media/hhrutz/Mnemo3/CDs/Amplifikation090921_1/tapes/HeizungGestureMix.aif
 /media/hhrutz/Mnemo3/CDs/FaedenZiehen100317_2/Interface3/stereo/Epanave2BackWrp mixedCut.aif
-/media/hhrutz/Mnemo3/CDs/FaedenZiehen100317_2/Interface3/sweeps/Swp10'36dryConSwp10'dryrv.aif
+/media/hhrutz/Mnemo3/CDs/Amplifikation090921_1/tapes/HeizungGestureMixB.aif
 /media/hhrutz/Mnemo3/CDs/FaedenZiehen100317_2/Interface3/stereo/Kelch2_030511Ct8FTPre mixedFix.aif
 /media/hhrutz/Mnemo3/CDs/FaedenZiehen100317_2/Interface3/audio_work/work/Glue0_1_1235177.aif
 /media/hhrutz/Mnemo3/CDs/FaedenZiehen100317_2/Interface3/audio_work/work/Glue21_4_1064290.aif

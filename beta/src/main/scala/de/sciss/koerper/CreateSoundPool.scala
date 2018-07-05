@@ -24,6 +24,7 @@ import scala.util.control.NonFatal
 
 object CreateSoundPool {
   def main(args: Array[String]): Unit = {
+//    findAllSpots()
     findEmptySpots()
   }
 
