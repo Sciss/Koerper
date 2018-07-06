@@ -22,7 +22,7 @@ import de.sciss.osc
 import de.sciss.synth.Client
 import de.sciss.synth.proc.{AuralSystem, SoundProcesses}
 
-import scala.swing.{Component, Dimension, Graphics2D, GridPanel, Swing}
+import scala.swing.{BorderPanel, Component, Dimension, Graphics2D, GridPanel, Label, Swing}
 
 object Prototype {
   def main(args: Array[String]): Unit = {
@@ -97,16 +97,22 @@ object Prototype {
       contents ++= dims
     }
 
+    private val lbInfo = new Label
+
     new swing.Frame {
       title = "Beta Test"
-      contents = panel
+      contents = new BorderPanel {
+        add(panel, BorderPanel.Position.Center)
+        add(lbInfo, BorderPanel.Position.South)
+      }
       pack().centerOnScreen()
       open()
     }
 
     def update(frame: Frame): Unit = {
-      println(frame.valuesIterator.map(_.pt.size).mkString(", "))
+//      println(frame.valuesIterator.map(_.pt.size).mkString(", "))
       current = frame
+      lbInfo.text = s"${frame.size} trajectories"
       panel.repaint()
     }
   }
@@ -155,18 +161,22 @@ object Prototype {
           val t0Opt  = frameBuilder.get(id)
           t0Opt.foreach { t0 =>
             val t1 = if (t0.pt.size < VisualTrajLen) t0 else t0.copy(pt = t0.pt.tail)
-            val c: Coord = Array(c0, c1, c2, c3, c4, c5, c6, c7)
+            val c: Coord = {
+              val a = new Array[Float](8)
+              Array(c0, c1, c2, c3, c4, c5, c6, c7)
+            }
             val t2 = t1.copy(pt = t1.pt :+ c)
             frameBuilder += id -> t2
           }
 
         case osc.Message("/t_new", id: Int) =>
           cyclicIds.headOption.foreach { cId =>
+            cyclicIds -= cId
             idMap.get(id).foreach { cId => cyclicIds += cId }
             idMap += id -> cId
             val t = Traj(cId = cId, pt = Vector.empty)
             frameBuilder += id -> t
-            println(s"t_new $id / $cId; total ${frameBuilder.size}")
+//            println(s"t_new $id / $cId; total ${frameBuilder.size}")
           }
 
         case osc.Message("/t_end", id: Int) =>
@@ -175,7 +185,7 @@ object Prototype {
             cyclicIds += cId
             idMap -= id
           }
-          println(s"t_end; total ${frameBuilder.size}")
+//          println(s"t_end ; total ${frameBuilder.size}")
 
         case _ =>
           println(s"Warning: dropping unknown OSC packet $p")
