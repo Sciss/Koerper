@@ -13,18 +13,25 @@
 
 package de.sciss.koerper
 
-import java.awt.{Color, RenderingHints}
 import java.awt.geom.Path2D
+import java.awt.{Color, RenderingHints}
 import java.net.InetSocketAddress
 
-import de.sciss.lucre.synth.{InMemory, Server, Txn}
-import de.sciss.osc
-import de.sciss.synth.Client
+import de.sciss.file._
+import de.sciss.kollflitz.Vec
+import de.sciss.lucre.stm.TxnLike
+import de.sciss.lucre.synth.{Buffer, InMemory, Server, Synth, Txn}
+import de.sciss.{numbers, osc}
+import de.sciss.synth.io.AudioFile
 import de.sciss.synth.proc.{AuralSystem, SoundProcesses}
+import de.sciss.synth.{Client, ControlSet, SynthGraph, addAfter, addToHead, freeSelf}
 
+import scala.concurrent.stm.{Ref, TMap}
 import scala.swing.{BorderPanel, Component, Dimension, Graphics2D, GridPanel, Label, Swing}
 
 object Prototype {
+  def any2stringadd: Nothing = throw new NotImplementedError()
+
   def main(args: Array[String]): Unit = {
     run()
   }
@@ -117,8 +124,114 @@ object Prototype {
     }
   }
 
+  final case class SoundInfo(f: File, numFrames: Int)
+
+  private var soundInfo: Vec[SoundInfo] = Vector.empty
+
+  def mkSoundInfo(): Unit = {
+    soundInfo = (0 until NumSounds).map { id =>
+      val f     = CreateSoundPool.formatTemplate(CreateSoundPool.tempPhaseOut, id + 1)
+      val spec  = AudioFile.readSpec(f)
+      SoundInfo(f, spec.numFrames.toInt)
+    }
+  }
+
+  private final class Sound(s: Server) {
+    private final class Elem(val id: Int, val timbre: Int, val offset: Double, val dur: Double)
+
+    private[this] val soundMap  = TMap.empty[Int, Elem]
+    private[this] var master: Synth = _
+
+    def init()(implicit tx: Txn): this.type = {
+
+      val gM = SynthGraph {
+        import de.sciss.synth.Ops.stringToControl
+        import de.sciss.synth.ugen._
+        val count   = "count".kr(0.0).max(1)
+        val amp0    = "amp".kr(1.0).clip(0, 1) * 0.4 * count.sqrt.reciprocal
+        val amp     = Lag.ar(amp0, 1.0)
+        val in      = LeakDC.ar(In.ar(0, 3))
+        val sig     = Limiter.ar(in * amp, level = 0.4)
+        ReplaceOut.ar(0, sig)
+      }
+
+      master = Synth.play(gM, nameHint = Some("master"))(target = s.defaultGroup, addAction = addAfter,
+        args = Nil)
+
+      this
+    }
+
+    private[this] val g = SynthGraph {
+      import de.sciss.synth.Ops.stringToControl
+      import de.sciss.synth.ugen._
+      val posRad  = "pos".kr
+      val pos     = posRad / math.Pi
+      val amp     = "amp".kr
+      val buf     = "buf".kr
+      val dur     = "dur".kr
+      val atk     = "atk".kr
+      val rls     = "rls".kr
+//      val play    = PlayBuf.ar(numChannels = 1, buf = buf, loop = 0)
+      val play    = DiskIn.ar(numChannels = 1, buf = buf, loop = 0)
+      val env     = Env.linen(attack = atk, sustain = dur - (atk + rls), release = rls)
+      val eg      = EnvGen.ar(env, levelScale = amp, doneAction = freeSelf)
+      val sig     = play * eg
+      val pan     = PanAz.ar(numChannels = 3, in = sig, pos = pos)
+      Out.ar(0, pan)
+    }
+
+    private[this] val playCount = Ref(0)
+
+    private def play(e: Elem)(implicit tx: Txn): Unit = {
+      import TxnLike.peer
+      val info        = soundInfo(e.timbre)
+      import numbers.Implicits._
+      val numFrames   = (info.numFrames * e.dur.clip(0.1, 1.0)).toInt
+      val startFrame  = ((info.numFrames - numFrames) * e.offset.clip(0.0, 1.0)).toInt
+      val dur         = numFrames / 44100.0
+      val atk         = if (startFrame == 0) 0.0 else 0.002
+      val rls         = if (numFrames  == info.numFrames) 0.0 else 1.0
+      val buf         = Buffer.diskIn(s)(path = info.f.path, startFrame = startFrame)
+      val dep         = buf :: Nil
+      val pos         = e.id % 3 * (2 * math.Pi) / 3
+      playCount += 1
+      master.set("count" -> playCount())
+      val args: List[ControlSet] = List[ControlSet](
+        "pos" -> pos,
+        "amp" -> 1.0,
+        "buf" -> buf.id,
+        "dur" -> dur,
+        "atk" -> atk,
+        "rls" -> rls
+      )
+      val syn = Synth.play(g)(target = s.defaultGroup, addAction = addToHead, args = args, dependencies = dep)
+      syn.onEndTxn { implicit tx =>
+        buf.dispose()
+        playCount -= 1
+        master.set("count" -> playCount())
+        soundMap.remove(e.id)
+      }
+    }
+
+    def update(frame: Frame)(implicit tx: Txn): Unit = {
+      import TxnLike.peer
+      frame.foreach { case (id, _ /* traj */) =>
+        soundMap.get(id).fold[Unit] {
+          val timbre  = (math.random() * NumSounds).toInt
+          val offset  = 0.0
+          val dur     = 1.0
+          val e = new Elem(id = id, timbre = timbre, offset = offset, dur = dur)
+          play(e)
+          soundMap.put(id, e)
+
+        } (_ => ())
+      }
+    }
+  }
+
   def run(): Unit = {
     SoundProcesses.init()
+    mkSoundInfo()
 
     lazy val views: Views = new Views
 
@@ -146,11 +259,19 @@ object Prototype {
     var cyclicIds     = Set(0 until MaxNumTraj: _*)
     var idMap         = Map.empty[Int, Int]
 
+    @volatile
+    var soundOpt      = Option.empty[Sound]
+
     rcv.action = { (p, _) =>
       p match {
         case osc.Message("/f_new") =>
           val currentFrame  = frameBuilder
           // frameBuilder      = Map.empty
+          soundOpt.foreach { sound =>
+            system.step { implicit tx =>
+              sound.update(currentFrame)
+            }
+          }
           Swing.onEDT {
             views.update(currentFrame)
           }
@@ -163,7 +284,15 @@ object Prototype {
             val t1 = if (t0.pt.size < VisualTrajLen) t0 else t0.copy(pt = t0.pt.tail)
             val c: Coord = {
               val a = new Array[Float](8)
-              Array(c0, c1, c2, c3, c4, c5, c6, c7)
+              a(0) = c0
+              a(1) = c1
+              a(2) = c2
+              a(3) = c3
+              a(4) = c4
+              a(5) = c5
+              a(6) = c6
+              a(7) = c7
+              a
             }
             val t2 = t1.copy(pt = t1.pt :+ c)
             frameBuilder += id -> t2
@@ -194,9 +323,14 @@ object Prototype {
 
     system.step { implicit tx =>
       aural.addClient(new AuralSystem.Client {
-        def auralStarted(s: Server)(implicit tx: Txn): Unit = ()
+        def auralStarted(s: Server)(implicit tx: Txn): Unit = {
+          val sound = new Sound(s).init()
+          soundOpt = Some(sound)
+        }
 
-        def auralStopped()(implicit tx: Txn): Unit = ()
+        def auralStopped()(implicit tx: Txn): Unit = {
+          soundOpt = None
+        }
       })
       aural.start(sCfg, cCfg)
     }
