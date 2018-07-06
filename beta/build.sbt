@@ -44,14 +44,16 @@ lazy val root = project.in(file("."))
       "jzv3d releases"    at "http://maven.jzy3d.org/releases"
     ),
     libraryDependencies ++= Seq(
-      "de.sciss"          %% "fileutil"                 % deps.main.fileUtil,
-      "de.sciss"          %% "fscape-macros"            % deps.main.fscape,
-      "de.sciss"          %% "lucre-bdb"                % deps.main.lucre,
-      "de.sciss"          %% "mellite"                  % deps.main.mellite,
-      "de.sciss"          %% "neuralgas-sphere"         % deps.main.neuralGas,
-      "de.sciss"          %% "soundprocesses-core"      % deps.main.soundProcesses,
-      "de.sciss"          %% "soundprocesses-compiler"  % deps.main.soundProcesses,
-      "com.github.scopt"  %% "scopt"                    % deps.main.scopt
+      "de.sciss"          %% "fileutil"                   % deps.main.fileUtil,
+      "de.sciss"          %% "fscape-macros"              % deps.main.fscape,
+      "de.sciss"          %% "lucre-bdb"                  % deps.main.lucre,
+      "de.sciss"          %% "mellite"                    % deps.main.mellite,
+      "de.sciss"          %% "neuralgas-sphere"           % deps.main.neuralGas,
+      "de.sciss"          %% "soundprocesses-core"        % deps.main.soundProcesses,
+      "de.sciss"          %% "soundprocesses-compiler"    % deps.main.soundProcesses,
+      "com.github.scopt"  %% "scopt"                      % deps.main.scopt,
+      "de.sciss"          %% "negatum"                    % deps.test.negatum % Test,
+      "de.sciss"          %% "scalacolliderugens-plugins" % deps.test.ugens   // bloody sbt bug
     )
   )
 
@@ -65,5 +67,9 @@ lazy val deps = new {
     val neuralGas         = "2.3.2"
     val scopt             = "3.7.0"
     val soundProcesses    = "3.20.2"
+  }
+  val test = new {
+    val negatum           = "0.6.0-SNAPSHOT"
+    val ugens             = "1.19.1"
   }
 }

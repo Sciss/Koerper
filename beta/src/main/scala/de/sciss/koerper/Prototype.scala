@@ -26,8 +26,9 @@ import de.sciss.synth.io.AudioFile
 import de.sciss.synth.proc.{AuralSystem, SoundProcesses}
 import de.sciss.synth.{Client, ControlSet, SynthGraph, addAfter, addToHead, freeSelf}
 
-import scala.concurrent.stm.{Ref, TMap}
-import scala.swing.{BorderPanel, Component, Dimension, Graphics2D, GridPanel, Label, Swing}
+import scala.concurrent.stm.{Ref, TMap, TxnExecutor}
+import scala.swing.event.ButtonClicked
+import scala.swing.{BorderPanel, Component, Dimension, FlowPanel, Graphics2D, GridPanel, Label, Swing, ToggleButton}
 
 object Prototype {
   def any2stringadd: Nothing = throw new NotImplementedError()
@@ -54,7 +55,7 @@ object Prototype {
 
   type Frame = Map[Int, Traj]
 
-  class Views {
+  class Views(aural: AuralSystem, rcv: osc.Channel) {
     private val colors = Array.tabulate(MaxNumTraj) { i =>
       val hue = i.toFloat / MaxNumTraj
       Color.getHSBColor(hue, 1f, 1f)
@@ -100,17 +101,46 @@ object Prototype {
       new Cut(hDim, vDim)
     }
 
-    private val panel = new GridPanel(4, 7) {
+    private val panelCenter = new GridPanel(4, 7) {
       contents ++= dims
     }
 
+    private def atomic[A](body: Txn => A): A =
+      TxnExecutor.defaultAtomic { itx =>
+        body(Txn.wrap(itx))
+      }
+
     private val lbInfo = new Label
+
+    private val ggDumpServer = new ToggleButton("scsynth OSC") {
+      listenTo(this)
+      reactions += {
+        case ButtonClicked(_) =>
+          val mode = if (selected) osc.Dump.Text else osc.Dump.Off
+          atomic { implicit tx =>
+            aural.serverOption.foreach { s =>
+              s.peer.dumpOSC(mode)
+            }
+          }
+      }
+    }
+
+    private val ggDumpInput = new ToggleButton("input OSC") {
+      listenTo(this)
+      reactions += {
+        case ButtonClicked(_) =>
+          val mode = if (selected) osc.Dump.Text else osc.Dump.Off
+          rcv.dump(mode)
+      }
+    }
+
+    private val panelBottom = new FlowPanel(lbInfo, ggDumpServer, ggDumpInput)
 
     new swing.Frame {
       title = "Beta Test"
       contents = new BorderPanel {
-        add(panel, BorderPanel.Position.Center)
-        add(lbInfo, BorderPanel.Position.South)
+        add(panelCenter, BorderPanel.Position.Center)
+        add(panelBottom, BorderPanel.Position.South )
       }
       pack().centerOnScreen()
       open()
@@ -120,7 +150,7 @@ object Prototype {
 //      println(frame.valuesIterator.map(_.pt.size).mkString(", "))
       current = frame
       lbInfo.text = s"${frame.size} trajectories"
-      panel.repaint()
+      panelCenter.repaint()
     }
   }
 
@@ -137,7 +167,7 @@ object Prototype {
   }
 
   private final class Sound(s: Server) {
-    private final class Elem(val id: Int, val timbre: Int, val offset: Double, val dur: Double)
+    private final class Elem(val id: Int, val syn: Synth, val timbre: Int, val offset: Double, val dur: Double)
 
     private[this] val soundMap  = TMap.empty[Int, Elem]
     private[this] var master: Synth = _
@@ -148,7 +178,7 @@ object Prototype {
         import de.sciss.synth.Ops.stringToControl
         import de.sciss.synth.ugen._
         val count   = "count".kr(0.0).max(1)
-        val amp0    = "amp".kr(1.0).clip(0, 1) * 0.4 * count.sqrt.reciprocal
+        val amp0    = "amp".kr(0.6).clip(0, 1) * count.sqrt.reciprocal
         val amp     = Lag.ar(amp0, 1.0)
         val in      = LeakDC.ar(In.ar(0, 3))
         val sig     = Limiter.ar(in * amp, level = 0.4)
@@ -164,25 +194,46 @@ object Prototype {
     private[this] val g = SynthGraph {
       import de.sciss.synth.Ops.stringToControl
       import de.sciss.synth.ugen._
-      val posRad  = "pos".kr
-      val pos     = posRad / math.Pi
-      val amp     = "amp".kr
       val buf     = "buf".kr
       val dur     = "dur".kr
       val atk     = "atk".kr
       val rls     = "rls".kr
+
+      val posX0   = "x".kr
+      val posY0   = "y".kr
+      val posX    = Lag.ar(posX0, 1.0)
+      val posY    = Lag.ar(posY0, 1.0)
+      val posRad  = posY atan2 posX
+      val pos     = posRad / math.Pi
+      val amp0    = "amp".kr
+      val amp     = Lag.ar(amp0, 1.0)
+
 //      val play    = PlayBuf.ar(numChannels = 1, buf = buf, loop = 0)
       val play    = DiskIn.ar(numChannels = 1, buf = buf, loop = 0)
       val env     = Env.linen(attack = atk, sustain = dur - (atk + rls), release = rls)
       val eg      = EnvGen.ar(env, levelScale = amp, doneAction = freeSelf)
       val sig     = play * eg
-      val pan     = PanAz.ar(numChannels = 3, in = sig, pos = pos)
+      // width = 1.0 means we have gaps (silences)
+      val pan     = PanAz.ar(numChannels = 3, in = sig, pos = pos, width = 1.0)
       Out.ar(0, pan)
     }
 
     private[this] val playCount = Ref(0)
 
-    private def play(e: Elem)(implicit tx: Txn): Unit = {
+    private def set(e: Elem, c: Coord)(implicit tx: Txn): Unit = {
+      import numbers.Implicits._
+      val amp   = c(3).linLin(-1, +1, 0, 1).clip(0, 1)
+      val x     = c(4).clip(-1, +1)
+      val y     = c(5).clip(-1, +1)
+      val args: List[ControlSet] = List[ControlSet](
+        "x"   -> x,
+        "y"   -> y,
+        "amp" -> amp
+      )
+      e.syn.set(args: _*)
+    }
+
+    private def play(e: Elem, coord: Coord)(implicit tx: Txn): Unit = {
       import TxnLike.peer
       val info        = soundInfo(e.timbre)
       import numbers.Implicits._
@@ -190,21 +241,21 @@ object Prototype {
       val startFrame  = ((info.numFrames - numFrames) * e.offset.clip(0.0, 1.0)).toInt
       val dur         = numFrames / 44100.0
       val atk         = if (startFrame == 0) 0.0 else 0.002
-      val rls         = if (numFrames  == info.numFrames) 0.0 else 1.0
+      val rls         = if (numFrames  == info.numFrames) 0.0 else math.min(dur - atk, 1.0)
       val buf         = Buffer.diskIn(s)(path = info.f.path, startFrame = startFrame)
       val dep         = buf :: Nil
-      val pos         = e.id % 3 * (2 * math.Pi) / 3
       playCount += 1
       master.set("count" -> playCount())
       val args: List[ControlSet] = List[ControlSet](
-        "pos" -> pos,
-        "amp" -> 1.0,
         "buf" -> buf.id,
         "dur" -> dur,
         "atk" -> atk,
         "rls" -> rls
       )
-      val syn = Synth.play(g)(target = s.defaultGroup, addAction = addToHead, args = args, dependencies = dep)
+//      val syn = Synth.play(g)(target = s.defaultGroup, addAction = addToHead, args = args, dependencies = dep)
+      val syn = e.syn
+      syn.play(target = s.defaultGroup, addAction = addToHead, args = args, dependencies = dep)
+      set(e, coord)
       syn.onEndTxn { implicit tx =>
         buf.dispose()
         playCount -= 1
@@ -214,17 +265,28 @@ object Prototype {
     }
 
     def update(frame: Frame)(implicit tx: Txn): Unit = {
-      import TxnLike.peer
-      frame.foreach { case (id, _ /* traj */) =>
-        soundMap.get(id).fold[Unit] {
-          val timbre  = (math.random() * NumSounds).toInt
-          val offset  = 0.0
-          val dur     = 1.0
-          val e = new Elem(id = id, timbre = timbre, offset = offset, dur = dur)
-          play(e)
-          soundMap.put(id, e)
+      frame.foreach { case (id, traj) =>
+        traj.pt.lastOption.foreach { coord =>
+          updateWith(id, coord)
+        }
+      }
+    }
 
-        } (_ => ())
+    private def updateWith(id: Int, coord: Coord)(implicit tx: Txn): Unit = {
+      import TxnLike.peer
+      soundMap.get(id).fold[Unit] {
+//        val timbre  = (math.random() * NumSounds).toInt
+        import numbers.Implicits._
+        val timbre  = coord(0).linLin(-1, +1, 0, NumSounds - 1).round.clip(0, NumSounds - 1) // XXX TODO
+        val offset  = coord(6).linLin(-0.9, +0.9, 0, 1).clip(0, 1)
+        val dur     = coord(7).linLin(-0.9, +0.9, 0, 1).clip(0, 1)
+        val syn     = Synth(s, g, nameHint = Some("atom"))
+        val e = new Elem(id = id, syn = syn, timbre = timbre, offset = offset, dur = dur)
+        play(e, coord)
+        soundMap.put(id, e)
+
+      } { e =>
+        set(e, coord)
       }
     }
   }
@@ -233,13 +295,19 @@ object Prototype {
     SoundProcesses.init()
     mkSoundInfo()
 
-    lazy val views: Views = new Views
+    implicit val aural: AuralSystem = AuralSystem()
+
+    val oscCfg  = osc.UDP.Config()
+    oscCfg.localSocketAddress = new InetSocketAddress(IpHH, OscPortHH)
+    val rcv     = osc.UDP.Receiver(oscCfg)
+    //    rcv.dump()
+
+    lazy val views: Views = new Views(aural, rcv)
 
     Swing.onEDT {
       views
     }
 
-    implicit val aural: AuralSystem = AuralSystem()
     val sCfg = Server.Config()
     sCfg.outputBusChannels  = 3
     sCfg.inputBusChannels   = 0
@@ -249,10 +317,6 @@ object Prototype {
     type S = InMemory
     implicit val system: S = InMemory()
 
-    val oscCfg  = osc.UDP.Config()
-    oscCfg.localSocketAddress = new InetSocketAddress(IpHH, OscPortHH)
-    val rcv     = osc.UDP.Receiver(oscCfg)
-//    rcv.dump()
     rcv.connect()
 
     var frameBuilder  = Map.empty[Int, Traj]

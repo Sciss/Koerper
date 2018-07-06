@@ -1,0 +1,6 @@
+- safety: touch elems per frame, remove untouched (prevent missing `/t_end`)
+- timbre space (SOM 3D)
+- synchronisation (compound 'hits')
+- estimate if we'll run out of node-ids
+- discolouration
+- take trajectory speed into account

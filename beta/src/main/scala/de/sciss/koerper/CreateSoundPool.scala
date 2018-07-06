@@ -26,7 +26,7 @@ object CreateSoundPool {
   def main(args: Array[String]): Unit = {
 //    findAllSpots()
 //    findEmptySpots()
-//    minPhaseTest()
+
     mkAllMinPhase()
   }
 
@@ -99,9 +99,16 @@ object CreateSoundPool {
   val audioWork   : File  = file("/data") / "projects" / "Koerper" / "audio_work"
   val tempSpotOut : File  = audioWork / "beta-spots" / "beta-spot-%d.aif"
   val tempPhaseOut: File  = audioWork / "beta-phase" / "beta-phase-%d.aif"
+  val tempFeat    : File  = audioWork / "beta-feat"  / "beta-feat-%d.bin"
 
   def mkSpotIterator(): Iterator[(File, Int)] =
     Iterator.from(1).map(formatTemplate(tempSpotOut, _)).takeWhile(_.exists()).zipWithIndex
+
+  def mkPhaseIterator(): Iterator[(File, Int)] =
+    Iterator.from(1).map(formatTemplate(tempPhaseOut, _)).takeWhile(_.exists()).zipWithIndex
+
+  def mkFeatIterator(): Iterator[(File, Int)] =
+    Iterator.from(1).map(formatTemplate(tempFeat, _)).takeWhile(_.exists()).zipWithIndex
 
   def findEmptySpots(): Unit = {
     val minLen = (2.5 * 44100).toLong
