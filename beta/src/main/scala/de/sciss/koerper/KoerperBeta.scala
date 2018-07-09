@@ -13,32 +13,27 @@
 
 package de.sciss.koerper
 
-import java.awt.geom.Path2D
-import java.awt.{Color, RenderingHints}
 import java.net.InetSocketAddress
 
 import de.sciss.file._
 import de.sciss.koerper.AdHocMap.Key
 import de.sciss.kollflitz.Vec
 import de.sciss.lucre.data.SkipOctree
-import de.sciss.lucre.geom.{IntDistanceMeasure2D, IntPoint2D}
 import de.sciss.lucre.geom.IntSpace.TwoDim
-import de.sciss.lucre.stm.TxnLike
-import de.sciss.lucre.synth.{Buffer, InMemory, Server, Synth, Sys, Txn}
+import de.sciss.lucre.synth.{InMemory, Server, Txn}
+import de.sciss.osc
+import de.sciss.synth.Client
 import de.sciss.synth.io.AudioFile
 import de.sciss.synth.proc.{AuralSystem, SoundProcesses}
-import de.sciss.synth.{Client, ControlSet, SynthGraph, addAfter, addToHead, freeSelf}
-import de.sciss.{numbers, osc}
 
-import scala.concurrent.stm.{Ref, TMap, TxnExecutor}
-import scala.swing.event.{ButtonClicked, ValueChanged}
-import scala.swing.{BorderPanel, Component, Dimension, FlowPanel, Graphics2D, GridPanel, Label, Slider, Swing, ToggleButton}
+import scala.concurrent.stm.TxnExecutor
+import scala.swing.Swing
 
 object KoerperBeta {
   def any2stringadd: Nothing = throw new NotImplementedError()
 
   final case class Config(minNumTraj: Int = 2, minSyncLen: Int = 200, maxNumTraj: Int = 24, oscPort: Int = 57112,
-                          gui: Boolean = false, masterGain: Double = 1.2, limiter: Double = 0.8)
+                          gui: Boolean = false, masterGain: Double = 1.2, fgGain: Double = 0.8, limiter: Double = 0.8)
 
   def main(args: Array[String]): Unit = {
     val default = Config()
@@ -67,6 +62,11 @@ object KoerperBeta {
         .text(s"Master gain, linear (default: ${default.masterGain})")
         .validate { v => if (v > 0) success else failure("Must be > 0") }
         .action { (v, c) => c.copy(masterGain = v) }
+
+      opt[Double]('f', "foreground")
+        .text(s"Foreground gain, linear (default: ${default.fgGain})")
+        .validate { v => if (v > 0) success else failure("Must be > 0") }
+        .action { (v, c) => c.copy(fgGain = v) }
 
       opt[Double]("limiter")
         .text(s"Limiter ceiling, linear (default: ${default.limiter})")

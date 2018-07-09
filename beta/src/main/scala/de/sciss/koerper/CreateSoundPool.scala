@@ -96,7 +96,13 @@ object CreateSoundPool {
     println("Done.")
   }
 
-  val audioWork   : File  = file("/data") / "projects" / "Koerper" / "audio_work"
+  val baseDir: File  = {
+    val tmp = file("/data") / "projects"
+    val prj = if (tmp.exists()) tmp else userHome / "Documents" / "projects"
+    prj / "Koerper"
+  }
+
+  val audioWork   : File  = baseDir / "audio_work"
   val tempSpotOut : File  = audioWork / "beta-spots" / "beta-spot-%d.aif"
   val tempPhaseOut: File  = audioWork / "beta-phase" / "beta-phase-%d.aif"
   val tempFeat    : File  = audioWork / "beta-feat"  / "beta-feat-%d.bin"
