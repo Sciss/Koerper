@@ -137,21 +137,21 @@ object AnalyzeOsc {
           numAllIsecCount += numAllIsec -> (numAllIsecCount(numAllIsec) + 1)
 
         case osc.Message("/t_set", id: Int,
-        c0: Float, c1: Float, c2: Float, c3: Float, c4: Float, c5: Float, c6: Float, c7: Float) =>
-
+        c0: Float, c1: Float, c2: Float, c3: Float, c4: Float, c5: Float /*, c6: Float, c7: Float */) =>
+          require(Prototype.Dimensions == 6)
           val t0Opt  = frameBuilder.get(id)
           t0Opt.foreach { t0 =>
             val t1 = t0 // if (t0.pt.size < VisualTrajLen) t0 else t0.copy(pt = t0.pt.tail)
             val c = {
-              val a = new Array[Float](8)
+              val a = new Array[Float](Prototype.Dimensions)
               a(0) = c0
               a(1) = c1
               a(2) = c2
               a(3) = c3
               a(4) = c4
               a(5) = c5
-              a(6) = c6
-              a(7) = c7
+//              a(6) = c6
+//              a(7) = c7
               a
             }
             val t2 = t1.copy(pt = t1.pt :+ c)

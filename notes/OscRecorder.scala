@@ -10,6 +10,8 @@ val fmt = new java.text.SimpleDateFormat("'osc'yyMMdd_HHmmss'.bin'", java.util.L
 
 // fmt.format(new java.util.Date)
 
+val c = osc.PacketCodec.default
+
 def flush(): Unit = sync.synchronized {
   val name = "beta-osc.bin" // fmt.format(new java.util.Date)
   val f = file("/data/temp") / name
@@ -47,6 +49,9 @@ val oscCfg = osc.UDP.Config()
 oscCfg.localSocketAddress = new java.net.InetSocketAddress("192.168.0.77", 57112)
 val rcv = osc.UDP.Receiver(oscCfg)
 rcv.connect()
+rcv.dump(osc.Dump.Text)
+rcv.dump(osc.Dump.Off)
+
 rcv.action = { 
   case (m: osc.Message, _) => add(m)
   case _ =>

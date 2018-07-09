@@ -27,8 +27,8 @@ import de.sciss.synth.proc.{AuralSystem, SoundProcesses}
 import de.sciss.synth.{Client, ControlSet, SynthGraph, addAfter, addToHead, freeSelf}
 
 import scala.concurrent.stm.{Ref, TMap, TxnExecutor}
-import scala.swing.event.ButtonClicked
-import scala.swing.{BorderPanel, Component, Dimension, FlowPanel, Graphics2D, GridPanel, Label, Swing, ToggleButton}
+import scala.swing.event.{ButtonClicked, ValueChanged}
+import scala.swing.{BorderPanel, Component, Dimension, FlowPanel, Graphics2D, GridPanel, Label, Slider, Swing, ToggleButton}
 
 object Prototype {
   def any2stringadd: Nothing = throw new NotImplementedError()
@@ -37,11 +37,16 @@ object Prototype {
     run()
   }
 
-  val IpHH          = "192.168.0.77"
+  val IpLaptop      = "192.168.0.77"
+  val IpPi          = "192.168.0.13"
   val OscPortHH     = 57112
   val NumSounds     = 2187
   val VisualTrajLen = 10
   val MaxNumTraj    = 24
+  val Dimensions    = 6
+
+  val isPi: Boolean = sys.props("user.name") == "pi"
+  val IpHH: String  = if (isPi) IpPi else IpLaptop
 
   type Coord = Array[Float]
 
@@ -97,11 +102,11 @@ object Prototype {
       }
     }
 
-    private val dims = (0 until 8).combinations(2).map { case Seq(hDim, vDim) =>
+    private val dims = (0 until Dimensions).combinations(2).map { case Seq(hDim, vDim) =>
       new Cut(hDim, vDim)
     }
 
-    private val panelCenter = new GridPanel(4, 7) {
+    private val panelCenter = new GridPanel(3, 5 /* 4, 7 */) {
       contents ++= dims
     }
 
@@ -134,7 +139,37 @@ object Prototype {
       }
     }
 
-    private val panelBottom = new FlowPanel(lbInfo, ggDumpServer, ggDumpInput)
+    private val ggVolume: Slider = new Slider {
+      min = 0
+      max = 100
+
+      import numbers.Implicits._
+
+      def get: Double = {
+        val n = value.linLin(min, max, -60, 12)
+        if (n == -60) 0 else n.dbAmp
+      }
+
+      def set(gain: Double): Unit = {
+        val n = if (gain == 0.0) -60 else gain.linLin(-60, 12, min, max).clip(min, max).round.toInt
+        value = n
+      }
+
+      set(1.2.ampDb)
+
+      listenTo(this)
+      reactions += {
+        case ValueChanged(_) =>
+          val gain = get
+          soundOpt.foreach { sound =>
+            atomic { implicit tx =>
+              sound.master.set("amp" -> gain)
+            }
+          }
+      }
+    }
+
+    private val panelBottom = new FlowPanel(lbInfo, ggDumpServer, ggDumpInput, ggVolume)
 
     new swing.Frame {
       title = "Beta Test"
@@ -170,7 +205,9 @@ object Prototype {
     private final class Elem(val id: Int, val syn: Synth, val timbre: Int, val offset: Double, val dur: Double)
 
     private[this] val soundMap  = TMap.empty[Int, Elem]
-    private[this] var master: Synth = _
+    private[this] var _master: Synth = _
+
+    def master: Synth = _master
 
     def init()(implicit tx: Txn): this.type = {
 
@@ -178,14 +215,14 @@ object Prototype {
         import de.sciss.synth.Ops.stringToControl
         import de.sciss.synth.ugen._
         val count   = "count".kr(0.0).max(1)
-        val amp0    = "amp".kr(0.6).clip(0, 1) * count.sqrt.reciprocal
+        val amp0    = "amp".kr(1.2).clip(0, 4) * count.sqrt.reciprocal
         val amp     = Lag.ar(amp0, 1.0)
         val in      = LeakDC.ar(In.ar(0, 3))
-        val sig     = Limiter.ar(in * amp, level = 0.4)
+        val sig     = Limiter.ar(in * amp, level = 0.8)
         ReplaceOut.ar(0, sig)
       }
 
-      master = Synth.play(gM, nameHint = Some("master"))(target = s.defaultGroup, addAction = addAfter,
+      _master = Synth.play(gM, nameHint = Some("master"))(target = s.defaultGroup, addAction = addAfter,
         args = Nil)
 
       this
@@ -245,7 +282,7 @@ object Prototype {
       val buf         = Buffer.diskIn(s)(path = info.f.path, startFrame = startFrame)
       val dep         = buf :: Nil
       playCount += 1
-      master.set("count" -> playCount())
+      _master.set("count" -> playCount())
       val args: List[ControlSet] = List[ControlSet](
         "buf" -> buf.id,
         "dur" -> dur,
@@ -259,7 +296,7 @@ object Prototype {
       syn.onEndTxn { implicit tx =>
         buf.dispose()
         playCount -= 1
-        master.set("count" -> playCount())
+        _master.set("count" -> playCount())
         soundMap.remove(e.id)
       }
     }
@@ -278,8 +315,8 @@ object Prototype {
 //        val timbre  = (math.random() * NumSounds).toInt
         import numbers.Implicits._
         val timbre  = coord(0).linLin(-1, +1, 0, NumSounds - 1).round.clip(0, NumSounds - 1) // XXX TODO
-        val offset  = coord(6).linLin(-0.9, +0.9, 0, 1).clip(0, 1)
-        val dur     = coord(7).linLin(-0.9, +0.9, 0, 1).clip(0, 1)
+        val offset  = coord(4 /* 6 */).linLin(-0.9, +0.9, 0, 1).clip(0, 1)
+        val dur     = coord(5 /* 7 */).linLin(-0.9, +0.9, 0, 1).clip(0, 1)
         val syn     = Synth(s, g, nameHint = Some("atom"))
         val e = new Elem(id = id, syn = syn, timbre = timbre, offset = offset, dur = dur)
         play(e, coord)
@@ -290,6 +327,10 @@ object Prototype {
       }
     }
   }
+
+
+  @volatile
+  private var soundOpt      = Option.empty[Sound]
 
   def run(): Unit = {
     SoundProcesses.init()
@@ -323,9 +364,6 @@ object Prototype {
     var cyclicIds     = Set(0 until MaxNumTraj: _*)
     var idMap         = Map.empty[Int, Int]
 
-    @volatile
-    var soundOpt      = Option.empty[Sound]
-
     rcv.action = { (p, _) =>
       p match {
         case osc.Message("/f_new") =>
@@ -341,21 +379,21 @@ object Prototype {
           }
 
         case osc.Message("/t_set", id: Int,
-          c0: Float, c1: Float, c2: Float, c3: Float, c4: Float, c5: Float, c6: Float, c7: Float) =>
+          c0: Float, c1: Float, c2: Float, c3: Float, c4: Float, c5: Float /*, c6: Float, c7: Float */) =>
 
           val t0Opt  = frameBuilder.get(id)
           t0Opt.foreach { t0 =>
             val t1 = if (t0.pt.size < VisualTrajLen) t0 else t0.copy(pt = t0.pt.tail)
             val c: Coord = {
-              val a = new Array[Float](8)
+              val a = new Array[Float](Dimensions /* 8 */)
               a(0) = c0
               a(1) = c1
               a(2) = c2
               a(3) = c3
               a(4) = c4
               a(5) = c5
-              a(6) = c6
-              a(7) = c7
+//              a(6) = c6
+//              a(7) = c7
               a
             }
             val t2 = t1.copy(pt = t1.pt :+ c)
