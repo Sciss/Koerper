@@ -1,6 +1,4 @@
 [Desktop Entry]
 Name=Koerper-Beta
 Type=Application
-Terminal=true
-Exec=/home/pi/Documents/devel/Koerper/beta/run-beta.sh
-
+Exec=lxterminal -e ""/home/pi/Documents/devel/Koerper/beta/run-beta.sh"

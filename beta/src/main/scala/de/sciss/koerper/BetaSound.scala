@@ -50,7 +50,7 @@ final class BetaSound[S <: Sys[S]](s: Server, config: Config, timbreMap: SkipOct
       import de.sciss.synth.ugen._
       val count   = "count".kr(0.0).max(1)
       val amp0    = count.sqrt.reciprocal
-      val amp     = Lag.ar(amp0, 1.0)
+      val amp     = Lag.kr(amp0, 1.0) // Lag.ar(amp0, 1.0)
       val in      = In.ar(0, 3)
       val sig     = in * amp
       ReplaceOut.ar(0, sig)
@@ -60,7 +60,7 @@ final class BetaSound[S <: Sys[S]](s: Server, config: Config, timbreMap: SkipOct
       import de.sciss.synth.Ops.stringToControl
       import de.sciss.synth.ugen._
       val amp0    = "amp".kr(1.2).clip(0, 4)
-      val amp     = Lag.ar(amp0, 1.0)
+      val amp     = amp0 // Lag.kr(amp0, 1.0) // Lag.ar(amp0, 1.0)
       val in      = LeakDC.ar(In.ar(0, 3))
       val sig     = Limiter.ar(in * amp, level = config.limiter)
       ReplaceOut.ar(0, sig)
@@ -84,12 +84,12 @@ final class BetaSound[S <: Sys[S]](s: Server, config: Config, timbreMap: SkipOct
 
     val posX0   = "x".kr
     val posY0   = "y".kr
-    val posX    = Lag.ar(posX0, 1.0)
-    val posY    = Lag.ar(posY0, 1.0)
+    val posX    = Lag.kr(posX0, 1.0) // Lag.ar(posX0, 1.0)
+    val posY    = Lag.kr(posY0, 1.0) // Lag.ar(posY0, 1.0)
     val posRad  = posY atan2 posX
     val pos     = posRad / math.Pi
     val amp0    = "amp".kr
-    val amp     = Lag.ar(amp0, 1.0)
+    val amp     = Lag.kr(amp0, 1.0) // Lag.ar(amp0, 1.0)
 
     //      val play    = PlayBuf.ar(numChannels = 1, buf = buf, loop = 0)
     val play    = DiskIn.ar(numChannels = 1, buf = buf, loop = 0)
@@ -105,16 +105,18 @@ final class BetaSound[S <: Sys[S]](s: Server, config: Config, timbreMap: SkipOct
     import de.sciss.synth.Ops.stringToControl
     import de.sciss.synth.ugen._
     val buf     = "buf" .kr
+    val bufDly  = "dly" .kr
     val dur     = "dur" .kr
     val ch      = "chan".kr
-    val amp0    = "amp".kr
+    val amp0    = "amp" .kr
     val amp     = amp0
     val atk     = 1.0
     val rls     = 1.0
     val play    = DiskIn.ar(numChannels = 1, buf = buf, loop = 0) * amp
-    val sig     = DelayN.ar(play, maxDelayTime = atk, delayTime = atk)
+    //    val sig     = DelayN.ar(play, maxDelayTime = atk, delayTime = atk)
+    val sig     = BufDelayN.ar(bufDly, play, delayTime = atk)
     val env     = Env.linen(attack = atk, sustain = dur - (atk + rls), release = rls)
-    val eg      = EnvGen.ar(env, doneAction = freeSelf)
+    val eg      = EnvGen.kr(env, doneAction = freeSelf) // EnvGen.ar(env, doneAction = freeSelf)
     XOut.ar(ch, sig, xfade = eg)
   }
 
@@ -208,9 +210,11 @@ final class BetaSound[S <: Sys[S]](s: Server, config: Config, timbreMap: SkipOct
     val numFrames   = info.numFrames
     val durSec      = numFrames / 44100.0
     val buf         = Buffer.diskIn(s)(path = info.f.path)
+    val bufDly      = Buffer(s)(numFrames = 65536) // must be power of two: 44100
     val dep         = buf :: Nil
     val args: List[ControlSet] = List[ControlSet](
-      "buf"   -> buf.id,
+      "buf"   -> buf    .id,
+      "dly"   -> bufDly .id,
       "dur"   -> durSec,
       "chan"  -> ch,
       "amp"   -> config.fgGain
@@ -218,7 +222,8 @@ final class BetaSound[S <: Sys[S]](s: Server, config: Config, timbreMap: SkipOct
     syn.play(target = _fgGroup, addAction = addToHead, args = args, dependencies = dep)
     set(e, coord)
     syn.onEndTxn { implicit tx =>
-      buf.dispose()
+      buf   .dispose()
+      bufDly.dispose()
       fgSoundMap.remove(ch)
     }
     fgSoundMap.put(ch, e)

@@ -32,8 +32,9 @@ import scala.swing.Swing
 object KoerperBeta {
   def any2stringadd: Nothing = throw new NotImplementedError()
 
-  final case class Config(minNumTraj: Int = 2, minSyncLen: Int = 200, maxNumTraj: Int = 24, oscPort: Int = 57112,
-                          gui: Boolean = false, masterGain: Double = 1.2, fgGain: Double = 0.8, limiter: Double = 0.8)
+  final case class Config(minNumTraj: Int = 2, minSyncLen: Int = 200, maxNumTraj: Int = 18, oscPort: Int = 57112,
+                          gui: Boolean = false, masterGain: Double = 1.2, fgGain: Double = 0.8, limiter: Double = 0.8,
+                          blockSize: Int = 64, scMem: Int = 64)
 
   def main(args: Array[String]): Unit = {
     val default = Config()
@@ -72,6 +73,22 @@ object KoerperBeta {
         .text(s"Limiter ceiling, linear (default: ${default.limiter})")
         .validate { v => if (v > 0 && v <= 1) success else failure("Must be > 0 and <= 1") }
         .action { (v, c) => c.copy(limiter = v) }
+
+      opt[Int]("block-size")
+        .text(s"scsynth block size (default: ${default.blockSize})")
+        .validate { v =>
+          import de.sciss.numbers.Implicits._
+          if (v >= 4 && v.isPowerOfTwo) success else failure("Must be >= 4 and a power of 2")
+        }
+        .action { (v, c) => c.copy(blockSize = v) }
+
+      opt[Int]("sc-mem")
+        .text(s"scsynth memory in MB (default: ${default.scMem})")
+        .validate { v =>
+          import de.sciss.numbers.Implicits._
+          if (v >= 1) success else failure("Must be >= 1")
+        }
+        .action { (v, c) => c.copy(scMem = v) }
 
       opt[Unit]('g', "gui")
         .text("Open GUI")
@@ -144,6 +161,8 @@ object KoerperBeta {
     val sCfg = Server.Config()
     sCfg.outputBusChannels  = 3
     sCfg.inputBusChannels   = 0
+    sCfg.blockSize          = config.blockSize
+    sCfg.memorySize         = config.scMem * 1024
     sCfg.deviceName         = Some("Koerper")
     val cCfg = Client.Config()
 
