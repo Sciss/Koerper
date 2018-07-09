@@ -70,31 +70,35 @@ object SessionPi {
     ws
   }
 
-  def mkEye()(implicit tx: S#Tx): List[Obj[S]] = {
+  def mkEye(useOsc: Boolean = true)(implicit tx: S#Tx): List[Obj[S]] = {
     val eye   = Eye[S]
     eye.name  = NameEye
     val aE    = eye.attr
     aE.put(Eye.attrFadeTime     , DoubleObj .newVar(60.0))
     aE.put(Eye.attrPointFraction, DoubleObj .newVar( 0.8))
     aE.put(Eye.attrMaxPoints    , IntObj    .newVar(192000))
+    val extent  = if (useOsc) 480 else 540
+    aE.put(Eye.attrExtent       , IntObj    .newVar(extent))
 
+    val list1: List[Obj[S]] = if (useOsc) {
+      val osc = OscNode[S]
+      osc.name = NameOsc
+      val aO = osc.attr
+      val isPi = Koerper.auxDir.path.contains("Documents")
+      if (isPi) {
+        aO.put(OscNode.attrLocalHost, StringObj.newVar(Koerper.IpRaspiVideo))
+      }
 
-    val osc   = OscNode[S]
-    osc.name  = NameOsc
-    val aO    = osc.attr
+      aO.put(OscNode.attrLocalPort, IntObj.newVar(Koerper.OscPortRaspiVideo))
+      //    aO.put(OscNode.attrTargetHost , ...)
+      //    aO.put(OscNode.attrTargetPort , ...)
+      val aRcv = mkOscReceive()
+      aO.put(OscNode.attrReceive, aRcv)
+      osc :: Nil
 
-    val isPi = Koerper.auxDir.path.contains("Documents")
-    if (isPi) {
-      aO.put(OscNode.attrLocalHost, StringObj.newVar(Koerper.IpRaspiVideo))
-    }
+    } else Nil
 
-    aO.put(OscNode.attrLocalPort, IntObj.newVar(Koerper.OscPortRaspiVideo))
-//    aO.put(OscNode.attrTargetHost , ...)
-//    aO.put(OscNode.attrTargetPort , ...)
-    val aRcv = mkOscReceive()
-    aO.put(OscNode.attrReceive, aRcv)
-
-    eye :: osc :: Nil
+    eye :: list1
   }
 
   def mkOscReceive()(implicit tx: S#Tx): Action[S] = {

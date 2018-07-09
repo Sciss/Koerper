@@ -64,6 +64,9 @@ object Eye extends Obj.Type {
   final val attrMaxPoints     = "max-points"
   final val attrPointFraction = "point-fraction"
 
+  /** Read at view initialization time only */
+  final val attrExtent        = "extent"
+
   final val attrAll: Set[String] = Set(
     attrFadeTime, attrMaxPoints, attrPointFraction, attrTable
   )

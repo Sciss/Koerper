@@ -36,7 +36,7 @@ object RenderProbabilityDistribution {
 
   final val NameRender    = "render-pd"
 
-  def mkObjects[S <: Sys[S]](config: Obj[S], locBase: ArtifactLocation[S], osc: OscNode[S])
+  def mkObjects[S <: Sys[S]](config: Obj[S], locBase: ArtifactLocation[S], osc: OscNode[S], noPi: Boolean)
                             (implicit tx: S#Tx): List[Obj[S]] = {
     import MacroImplicits._
     import de.sciss.fscape.graph.{AudioFileIn => _, AudioFileOut => _, _}
@@ -148,7 +148,7 @@ object RenderProbabilityDistribution {
     val artCalib      = Artifact(locAux, Artifact.Child("calib-180608a.aif"))
     a.put(KeyCalibIn, mkCue(artCalib))
 
-    val aDone = mkDoneAction[S]()
+    val aDone = if (noPi) mkDoneActionNoPi[S]() else mkDoneActionPi[S]()
     a.put("done", aDone)
 
     f.name = NameRender
@@ -163,7 +163,7 @@ object RenderProbabilityDistribution {
     cue
   }
 
-  private def mkDoneAction[S <: Sys[S]]()(implicit tx: S#Tx): Obj[S] = {
+  private def mkDoneActionPi[S <: Sys[S]]()(implicit tx: S#Tx): Obj[S] = {
     val a = proc.Action.apply[S] { u =>
       import de.sciss.fscape.lucre.FScape
       import de.sciss.koerper.lucre.{OscNode, SphereGNG}
@@ -187,30 +187,73 @@ object RenderProbabilityDistribution {
       // copy it to the pi
 
       // scp /data/projects/Koerper/aux/pd/pd-180603_104108.aif pi@192.168.0.27:Documents/projects/Koerper/aux/pd/
-      {
-        import scala.sys.process._
-        val remoteUser  = "pi"
-        val remoteIP    = "192.168.0.27"
-        val remoteBase  = "/home/pi/Documents/projects/Koerper/aux/pd/"
-        val remotePath  = s"$remoteBase${artTabVal.getName}"
-        val cmd = Seq("scp", artTabVal.getPath, s"$remoteUser@$remoteIP:$remoteBase")
-        val oscNode = u.root.![OscNode]("osc")
-        tx.afterCommit {
-          import de.sciss.synth.proc.SoundProcesses.executionContext
-          val codeFut = scala.concurrent.Future(cmd.!)
-          codeFut.foreach { code =>
-            if (code == 0) {
-              import u._
-              cursor.step { implicit tx =>
-                oscNode.!(osc.Message("/pd", remotePath))
-              }
-
-            } else {
-              Console.err.println(s"scp failed for $artTabVal")
+    {
+      import scala.sys.process._
+      val remoteUser  = "pi"
+      val remoteIP    = "192.168.0.27"
+      val remoteBase  = "/home/pi/Documents/projects/Koerper/aux/pd/"
+      val remotePath  = s"$remoteBase${artTabVal.getName}"
+      val cmd = Seq("scp", artTabVal.getPath, s"$remoteUser@$remoteIP:$remoteBase")
+      val oscNode = u.root.![OscNode]("osc")
+      tx.afterCommit {
+        import de.sciss.synth.proc.SoundProcesses.executionContext
+        val codeFut = scala.concurrent.Future(cmd.!)
+        codeFut.foreach { code =>
+          if (code == 0) {
+            import u._
+            cursor.step { implicit tx =>
+              oscNode.!(osc.Message("/pd", remotePath))
             }
+
+          } else {
+            Console.err.println(s"scp failed for $artTabVal")
           }
         }
       }
+    }
+
+      val IntObj.Var(count) = u.root.![IntObj]("iterations")
+      count() = count.value + 1
+
+      val run = u.root.![BooleanObj]("run").value
+      if (run) {
+        val iterate = u.root.![Action]("iterate")
+        println(s"[${new java.util.Date}] Körper: iteration done. Run is 'true'.")
+        import u._
+        iterate.execute(Action.Universe(iterate, workspace))
+      } else {
+        println(s"[${new java.util.Date}] Körper: iteration done. Run is 'false'.")
+      }
+    }
+
+    a.name = "pd-done"
+    a
+  }
+
+  private def mkDoneActionNoPi[S <: Sys[S]]()(implicit tx: S#Tx): Obj[S] = {
+    val a = proc.Action.apply[S] { u =>
+      import de.sciss.fscape.lucre.FScape
+      import de.sciss.koerper.lucre.{Eye, SphereGNG}
+
+      println(s"[${new java.util.Date}] Körper: FScape rendering stopped.")
+
+      // store the chunk in the 'us' folder
+      // val folderPD  = u.root.![Folder]("pd")
+      val fsc       = u.root.![FScape]("render-pd")
+      val artTab    = fsc.attr.![Artifact]("table-out")
+      val artTabVal = artTab.value
+      val specTab   = de.sciss.synth.io.AudioFile.readSpec(artTabVal)
+      val cueTab    = AudioCue.Obj(artTab, specTab, offset = 0L, gain = 1.0)
+      cueTab.name   = artTabVal.getName
+      // folderPD.addLast(cueTab)
+
+      // set it as 'table' parameter for GNG
+      val sphere    = u.root.![SphereGNG]("sphere")
+      sphere.attr.put("table", cueTab)
+
+      // set it as 'table' parameter for Eye
+      val eye       = u.root.![Eye]("eye")
+      eye.attr.put("table", cueTab)
 
       val IntObj.Var(count) = u.root.![IntObj]("iterations")
       count() = count.value + 1

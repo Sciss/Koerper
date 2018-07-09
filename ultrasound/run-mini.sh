@@ -16,4 +16,4 @@ sleep 8
 
 echo "- starting Mellite"
 cd /home/hhrutz/Documents/devel/Koerper/ultrasound/
-java -jar koerper-ultrasound.jar --workspace /home/hhrutz/Documents/projects/Koerper/aux/koerper-mini.mllt --start osc,stop,audio,iterate,sphere
+java -jar koerper-ultrasound.jar --workspace /home/hhrutz/Documents/projects/Koerper/aux/koerper-mini.mllt --start osc,stop,audio,iterate,sphere,eye

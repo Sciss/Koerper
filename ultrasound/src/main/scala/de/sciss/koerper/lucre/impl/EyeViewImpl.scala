@@ -19,6 +19,7 @@ import java.awt.event.{ActionEvent, KeyEvent}
 import java.awt.image.BufferedImage
 
 import de.sciss.koerper.Koerper
+import de.sciss.lucre.expr.IntObj
 import de.sciss.lucre.stm
 import de.sciss.lucre.stm.{Obj, Sys, TxnLike}
 import de.sciss.lucre.swing.deferTx
@@ -75,8 +76,9 @@ object EyeViewImpl {
     private[this] final val cosTable = Array.tabulate(32768)(i => Math.cos(i * Math.PI / 65536))
 
     private[this] final val PiH   = Math.PI / 2
-    private[this] final val EXT   = 480 // 1080
-    private[this] final val EXTM  = EXT - 1
+
+    private[this] var EXT   = 1080/2 // 480 // 1080
+    private[this] var EXTM  = EXT - 1
 
     @volatile
     private[this] var fadeTime = 1.0f
@@ -192,10 +194,15 @@ object EyeViewImpl {
 
     def init(obj: Eye[S])(implicit tx: S#Tx): this.type = {
       objH = tx.newHandle(obj)
+      implicit val map: EvtMap = obj.attr
+
+      map.$[IntObj](Eye.attrExtent).foreach { extObj =>
+        EXT   = extObj.value
+        EXTM  = EXT - 1
+      }
+
       deferTx(guiInit())
       initMultiAttr(obj)
-
-      implicit val map: EvtMap = obj.attr
 
       updateCue()
       mkN()

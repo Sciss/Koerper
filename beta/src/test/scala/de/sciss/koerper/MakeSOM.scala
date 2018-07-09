@@ -27,6 +27,7 @@ object MakeSOM {
   final val COOKIE = 0x57656967 // "Weig"
 
   def main(args: Array[String]): Unit = {
+//    mkWeights()
     run()
   }
 
@@ -44,6 +45,7 @@ object MakeSOM {
 
 //    import de.sciss.numbers.Implicits._
     val numRepeats  = 3*3*3
+    // empirically the 50% overhead suffices to represent all sounds
     val numIter     = (numPhases * numRepeats * 1.5).toInt
     println(s"numIter = $numIter; numPhases = $numPhases; uniqueWeights = $uniqueWeights")
 

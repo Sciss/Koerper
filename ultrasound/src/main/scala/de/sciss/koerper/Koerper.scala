@@ -57,7 +57,8 @@ object Koerper {
     Koerper.auxDir / s"sphere_coord-${ch+1}.aif"
   }
 
-  final case class Config(workspaceOpt: Option[File] = None, startObjects: List[String] = Nil)
+  final case class Config(workspaceOpt: Option[File] = None, startObjects: List[String] = Nil,
+                          cleanAux: Boolean = false)
 
   def main(args: Array[String]): Unit = {
     val default = Config()
@@ -70,6 +71,10 @@ object Koerper {
       opt[Seq[String]]('s', "start")
         .text("List of names of start objects in workspace's root directory")
         .action { (v, c) => c.copy(startObjects = v.toList) }
+
+      opt[Unit]('c', "clean")
+        .text("Clean old aux files")
+        .action { (_, c) => c.copy(cleanAux = true) }
     }
     p.parse(args, default).fold(sys.exit(1))(run)
   }
@@ -83,7 +88,19 @@ object Koerper {
     de.sciss.koerper.lucre.OscNodeObjView   .init()
   }
 
+  private def deleteFiles(files: Seq[File], retain: Int = 20): Unit = {
+    val toDelete = files.sorted(File.NameOrdering).dropRight(retain)
+    toDelete.foreach(_.delete())
+  }
+
   def run(config: Config): Unit = {
+    if (config.cleanAux) {
+      val usF = (auxDir / "us").children(_.extL == "irc")
+      deleteFiles(usF)
+      val pdF = (auxDir / "us").children(_.extL == "aif")
+      deleteFiles(pdF)
+    }
+
     Mellite.main(new Array(0))
     Swing.onEDT {
       init()

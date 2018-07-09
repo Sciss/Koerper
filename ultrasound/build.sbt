@@ -1,7 +1,7 @@
 lazy val baseName  = "Koerper-Ultrasound"
 lazy val baseNameL = baseName.toLowerCase
 
-lazy val projectVersion = "0.2.1"
+lazy val projectVersion = "0.3.0"
 
 def appMainClass = Some("de.sciss.koerper.Koerper")
 

@@ -39,7 +39,7 @@ object Prototype {
 
   val IpHH          = "192.168.0.77"
   val OscPortHH     = 57112
-  val NumSounds     = 1093    // XXX TODO currently
+  val NumSounds     = 2187
   val VisualTrajLen = 10
   val MaxNumTraj    = 24
 

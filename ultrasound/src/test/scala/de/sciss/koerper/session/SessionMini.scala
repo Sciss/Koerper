@@ -41,6 +41,8 @@ object SessionMini {
   final val NameOsc         = "osc"         // OscNode
   final val NameIterations  = "iterations"  // OscNode
 
+  final val NoPi  = true
+
   def main(args: Array[String]): Unit = {
     SoundProcesses.init()
     FScape        .init()
@@ -103,7 +105,7 @@ object SessionMini {
       listB += recChunkEns
       val constQ    = ConstQConfig.mkObj[S](ConstQConfig())
       listB += constQ
-      val renderPD  = RenderProbabilityDistribution.mkObjects(constQ, locBase, osc)
+      val renderPD  = RenderProbabilityDistribution.mkObjects(constQ, locBase, osc, noPi = NoPi)
       listB ++= renderPD
 //      val folderPD  = Folder[S]
 //      folderPD.name = NameFolderPD
@@ -122,6 +124,11 @@ object SessionMini {
       val count     = IntObj.newVar[S](0)
       count.name    = NameIterations
       listB += count
+
+      if (NoPi) {
+        val eyeObj = SessionPi.mkEye(useOsc = false)
+        listB ++= eyeObj
+      }
 
       listB.result().foreach(folder.addLast)
     }
