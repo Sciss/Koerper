@@ -18,13 +18,17 @@ import java.awt.{Color, RenderingHints}
 import java.net.InetSocketAddress
 
 import de.sciss.file._
+import de.sciss.koerper.AdHocMap.Key
 import de.sciss.kollflitz.Vec
+import de.sciss.lucre.data.SkipOctree
+import de.sciss.lucre.geom.{IntDistanceMeasure2D, IntPoint2D}
+import de.sciss.lucre.geom.IntSpace.TwoDim
 import de.sciss.lucre.stm.TxnLike
-import de.sciss.lucre.synth.{Buffer, InMemory, Server, Synth, Txn}
-import de.sciss.{numbers, osc}
+import de.sciss.lucre.synth.{Buffer, InMemory, Server, Synth, Sys, Txn}
 import de.sciss.synth.io.AudioFile
 import de.sciss.synth.proc.{AuralSystem, SoundProcesses}
 import de.sciss.synth.{Client, ControlSet, SynthGraph, addAfter, addToHead, freeSelf}
+import de.sciss.{numbers, osc}
 
 import scala.concurrent.stm.{Ref, TMap, TxnExecutor}
 import scala.swing.event.{ButtonClicked, ValueChanged}
@@ -33,17 +37,17 @@ import scala.swing.{BorderPanel, Component, Dimension, FlowPanel, Graphics2D, Gr
 object KoerperBeta {
   def any2stringadd: Nothing = throw new NotImplementedError()
 
-  final case class Config(minTraj: Int = 2, minSyncLen: Int = 100, maxNumTraj: Int = 24, oscPort: Int = 57112,
-                          gui: Boolean = false, masterGain: Double = 1.2)
+  final case class Config(minNumTraj: Int = 2, minSyncLen: Int = 200, maxNumTraj: Int = 24, oscPort: Int = 57112,
+                          gui: Boolean = false, masterGain: Double = 1.2, limiter: Double = 0.8)
 
   def main(args: Array[String]): Unit = {
     val default = Config()
 
     val p = new scopt.OptionParser[Config]("Körper-Beta") {
       opt[Int]('m', "min-traj")
-        .text(s"Minimum number of trajectories for background layer (default: ${default.minTraj})")
+        .text(s"Minimum number of trajectories for background layer (default: ${default.minNumTraj})")
         .validate { v => if (v >= 0) success else failure("Must be >= 0") }
-        .action { (v, c) => c.copy(minTraj = v) }
+        .action { (v, c) => c.copy(minNumTraj = v) }
 
       opt[Int]('l', "min-len")
         .text(s"Minimum trajectory length of synchronized layer (default: ${default.minSyncLen})")
@@ -63,6 +67,11 @@ object KoerperBeta {
         .text(s"Master gain, linear (default: ${default.masterGain})")
         .validate { v => if (v > 0) success else failure("Must be > 0") }
         .action { (v, c) => c.copy(masterGain = v) }
+
+      opt[Double]("limiter")
+        .text(s"Limiter ceiling, linear (default: ${default.limiter})")
+        .validate { v => if (v > 0 && v <= 1) success else failure("Must be > 0 and <= 1") }
+        .action { (v, c) => c.copy(limiter = v) }
 
       opt[Unit]('g', "gui")
         .text("Open GUI")
@@ -84,7 +93,7 @@ object KoerperBeta {
 
   //  private final class TrajPt(id: Int, coord: Array[Float])
 
-  final case class Traj(cId: Int, pt: Vector[Coord])
+  final case class Traj(cId: Int, pt: Vector[Coord], age: Int)
 
   //  private final class Frame {
   //    var traj = Map.empty[Int, Traj]
@@ -92,135 +101,12 @@ object KoerperBeta {
 
   type Frame = Map[Int, Traj]
 
-  class Views(config: Config, aural: AuralSystem, rcv: osc.Channel) {
-    private val colors = Array.tabulate(config.maxNumTraj) { i =>
-      val hue = i.toFloat / config.maxNumTraj
-      Color.getHSBColor(hue, 1f, 1f)
-    }
-
-    private[this] var current: Frame = Map.empty
-
-    private class Cut(hDim: Int, vDim: Int) extends Component {
-      private[this] val gp = new Path2D.Float
-
-      preferredSize = new Dimension(200, 200)
-
-      override protected def paintComponent(g: Graphics2D): Unit = {
-        val p = peer
-        val w = p.getWidth
-        val h = p.getHeight
-        g.setColor(Color.black)
-        g.fillRect(0, 0, w, h)
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING  , RenderingHints.VALUE_ANTIALIAS_ON )
-        g.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE  )
-        current.foreach {
-          case (_, traj) =>
-            val c = colors(traj.cId)
-            g.setColor(c)
-            gp.reset()
-            var move = true
-            traj.pt.foreach { coord =>
-              val x = (coord(hDim) *  0.5f + 0.5f) * w
-              val y = (coord(vDim) * -0.5f + 0.5f) * h
-              if (move) {
-                move = false
-                gp.moveTo(x, y)
-              } else {
-                gp.lineTo(x, y)
-              }
-            }
-            g.draw(gp)
-        }
-      }
-    }
-
-    private val dims = (0 until Dimensions).combinations(2).map { case Seq(hDim, vDim) =>
-      new Cut(hDim, vDim)
-    }
-
-    private val panelCenter = new GridPanel(3, 5 /* 4, 7 */) {
-      contents ++= dims
-    }
-
-    private val lbInfo = new Label
-
-    private val ggDumpServer = new ToggleButton("scsynth OSC") {
-      listenTo(this)
-      reactions += {
-        case ButtonClicked(_) =>
-          val mode = if (selected) osc.Dump.Text else osc.Dump.Off
-          atomic { implicit tx =>
-            aural.serverOption.foreach { s =>
-              s.peer.dumpOSC(mode)
-            }
-          }
-      }
-    }
-
-    private val ggDumpInput = new ToggleButton("input OSC") {
-      listenTo(this)
-      reactions += {
-        case ButtonClicked(_) =>
-          val mode = if (selected) osc.Dump.Text else osc.Dump.Off
-          rcv.dump(mode)
-      }
-    }
-
-    private val ggVolume: Slider = new Slider {
-      min = 0
-      max = 100
-
-      import numbers.Implicits._
-
-      def get: Double = {
-        val n = value.linLin(min, max, -60, 12)
-        if (n == -60) 0 else n.dbAmp
-      }
-
-      def set(gain: Double): Unit = {
-        val n = if (gain == 0.0) -60 else gain.linLin(-60, 12, min, max).clip(min, max).round.toInt
-        value = n
-      }
-
-      set(config.masterGain.ampDb)
-
-      listenTo(this)
-      reactions += {
-        case ValueChanged(_) =>
-          val gain = get
-          soundOpt.foreach { sound =>
-            atomic { implicit tx =>
-              sound.master.set("amp" -> gain)
-            }
-          }
-      }
-    }
-
-    private val panelBottom = new FlowPanel(lbInfo, ggDumpServer, ggDumpInput, ggVolume)
-
-    new swing.Frame {
-      title = "Beta Test"
-      contents = new BorderPanel {
-        add(panelCenter, BorderPanel.Position.Center)
-        add(panelBottom, BorderPanel.Position.South )
-      }
-      pack().centerOnScreen()
-      open()
-    }
-
-    def update(frame: Frame): Unit = {
-      //      println(frame.valuesIterator.map(_.pt.size).mkString(", "))
-      current = frame
-      lbInfo.text = s"${frame.size} trajectories"
-      panelCenter.repaint()
-    }
-  }
-
   final case class SoundInfo(f: File, numFrames: Int)
 
-  private var soundInfo: Vec[SoundInfo] = Vector.empty
+  @volatile
+  var soundInfo: Vec[SoundInfo] = Vector.empty
 
-  private def atomic[A](body: Txn => A): A =
+  def atomic[A](body: Txn => A): A =
     TxnExecutor.defaultAtomic { itx =>
       body(Txn.wrap(itx))
     }
@@ -233,136 +119,10 @@ object KoerperBeta {
     }
   }
 
-  private final class Sound(s: Server) {
-    private final class Elem(val id: Int, val syn: Synth, val timbre: Int, val offset: Double, val dur: Double)
-
-    private[this] val soundMap  = TMap.empty[Int, Elem]
-    private[this] var _master: Synth = _
-
-    def master: Synth = _master
-
-    def init()(implicit tx: Txn): this.type = {
-
-      val gM = SynthGraph {
-        import de.sciss.synth.Ops.stringToControl
-        import de.sciss.synth.ugen._
-        val count   = "count".kr(0.0).max(1)
-        val amp0    = "amp".kr(1.2).clip(0, 4) * count.sqrt.reciprocal
-        val amp     = Lag.ar(amp0, 1.0)
-        val in      = LeakDC.ar(In.ar(0, 3))
-        val sig     = Limiter.ar(in * amp, level = 0.8)
-        ReplaceOut.ar(0, sig)
-      }
-
-      _master = Synth.play(gM, nameHint = Some("master"))(target = s.defaultGroup, addAction = addAfter,
-        args = Nil)
-
-      this
-    }
-
-    private[this] val g = SynthGraph {
-      import de.sciss.synth.Ops.stringToControl
-      import de.sciss.synth.ugen._
-      val buf     = "buf".kr
-      val dur     = "dur".kr
-      val atk     = "atk".kr
-      val rls     = "rls".kr
-
-      val posX0   = "x".kr
-      val posY0   = "y".kr
-      val posX    = Lag.ar(posX0, 1.0)
-      val posY    = Lag.ar(posY0, 1.0)
-      val posRad  = posY atan2 posX
-      val pos     = posRad / math.Pi
-      val amp0    = "amp".kr
-      val amp     = Lag.ar(amp0, 1.0)
-
-      //      val play    = PlayBuf.ar(numChannels = 1, buf = buf, loop = 0)
-      val play    = DiskIn.ar(numChannels = 1, buf = buf, loop = 0)
-      val env     = Env.linen(attack = atk, sustain = dur - (atk + rls), release = rls)
-      val eg      = EnvGen.ar(env, levelScale = amp, doneAction = freeSelf)
-      val sig     = play * eg
-      // width = 1.0 means we have gaps (silences)
-      val pan     = PanAz.ar(numChannels = 3, in = sig, pos = pos, width = 1.0)
-      Out.ar(0, pan)
-    }
-
-    private[this] val playCount = Ref(0)
-
-    private def set(e: Elem, c: Coord)(implicit tx: Txn): Unit = {
-      import numbers.Implicits._
-      val amp   = c(3).linLin(-1, +1, 0, 1).clip(0, 1)
-      val x     = c(4).clip(-1, +1)
-      val y     = c(5).clip(-1, +1)
-      val args: List[ControlSet] = List[ControlSet](
-        "x"   -> x,
-        "y"   -> y,
-        "amp" -> amp
-      )
-      e.syn.set(args: _*)
-    }
-
-    private def play(e: Elem, coord: Coord)(implicit tx: Txn): Unit = {
-      import TxnLike.peer
-      val info        = soundInfo(e.timbre)
-      import numbers.Implicits._
-      val numFrames   = (info.numFrames * e.dur.clip(0.1, 1.0)).toInt
-      val startFrame  = ((info.numFrames - numFrames) * e.offset.clip(0.0, 1.0)).toInt
-      val dur         = numFrames / 44100.0
-      val atk         = if (startFrame == 0) 0.0 else 0.002
-      val rls         = if (numFrames  == info.numFrames) 0.0 else math.min(dur - atk, 1.0)
-      val buf         = Buffer.diskIn(s)(path = info.f.path, startFrame = startFrame)
-      val dep         = buf :: Nil
-      playCount += 1
-      _master.set("count" -> playCount())
-      val args: List[ControlSet] = List[ControlSet](
-        "buf" -> buf.id,
-        "dur" -> dur,
-        "atk" -> atk,
-        "rls" -> rls
-      )
-      //      val syn = Synth.play(g)(target = s.defaultGroup, addAction = addToHead, args = args, dependencies = dep)
-      val syn = e.syn
-      syn.play(target = s.defaultGroup, addAction = addToHead, args = args, dependencies = dep)
-      set(e, coord)
-      syn.onEndTxn { implicit tx =>
-        buf.dispose()
-        playCount -= 1
-        _master.set("count" -> playCount())
-        soundMap.remove(e.id)
-      }
-    }
-
-    def update(frame: Frame)(implicit tx: Txn): Unit = {
-      frame.foreach { case (id, traj) =>
-        traj.pt.lastOption.foreach { coord =>
-          updateWith(id, coord)
-        }
-      }
-    }
-
-    private def updateWith(id: Int, coord: Coord)(implicit tx: Txn): Unit = {
-      import TxnLike.peer
-      soundMap.get(id).fold[Unit] {
-        //        val timbre  = (math.random() * NumSounds).toInt
-        import numbers.Implicits._
-        val timbre  = coord(0).linLin(-1, +1, 0, NumSounds - 1).round.clip(0, NumSounds - 1) // XXX TODO
-        val offset  = coord(4 /* 6 */).linLin(-0.9, +0.9, 0, 1).clip(0, 1)
-        val dur     = coord(5 /* 7 */).linLin(-0.9, +0.9, 0, 1).clip(0, 1)
-        val syn     = Synth(s, g, nameHint = Some("atom"))
-        val e = new Elem(id = id, syn = syn, timbre = timbre, offset = offset, dur = dur)
-        play(e, coord)
-        soundMap.put(id, e)
-
-      } { e =>
-        set(e, coord)
-      }
-    }
-  }
-
+  type S = InMemory
 
   @volatile
-  private var soundOpt      = Option.empty[Sound]
+  var soundOpt = Option.empty[BetaSound[S]]
 
   def run(config: Config): Unit = {
     SoundProcesses.init()
@@ -375,7 +135,7 @@ object KoerperBeta {
     val rcv     = osc.UDP.Receiver(oscCfg)
     //    rcv.dump()
 
-    lazy val views: Option[Views] = if (config.gui) Some(new Views(config, aural, rcv)) else None
+    lazy val views: Option[BetaViews] = if (config.gui) Some(new BetaViews(config, aural, rcv)) else None
 
     Swing.onEDT {
       views
@@ -387,8 +147,11 @@ object KoerperBeta {
     sCfg.deviceName         = Some("Koerper")
     val cCfg = Client.Config()
 
-    type S = InMemory
     implicit val system: S = InMemory()
+
+    val (_, timbreMap: SkipOctree[S, TwoDim, Key]) = system.step { implicit tx =>
+      AdHocMap.mkMap[S]()
+    }
 
     rcv.connect()
 
@@ -407,8 +170,9 @@ object KoerperBeta {
           val usedCyclic    = currentFrame.valuesIterator.map(_.cId).toSet
           cyclicIds         = cyclicIds0 -- usedCyclic
           soundOpt.foreach { sound =>
+            val f1: Map[Int, Traj] = if (currentFrame.size >= config.minNumTraj) currentFrame else Map.empty
             system.step { implicit tx =>
-              sound.update(currentFrame)
+              sound.update(f1)
             }
           }
           if (config.gui) Swing.onEDT {
@@ -433,7 +197,7 @@ object KoerperBeta {
               //              a(7) = c7
               a
             }
-            val t2 = t1.copy(pt = t1.pt :+ c)
+            val t2 = t1.copy(pt = t1.pt :+ c, age = t1.age + 1)
             nextFrame += id -> t2
           }
 
@@ -442,7 +206,7 @@ object KoerperBeta {
             cyclicIds -= cId
             idMap.get(id).foreach { cId => cyclicIds += cId }
             idMap += id -> cId
-            val t = Traj(cId = cId, pt = Vector.empty)
+            val t = Traj(cId = cId, pt = Vector.empty, age = 0)
             nextFrame += id -> t
             //            println(s"t_new $id / $cId; total ${frameBuilder.size}")
           }
@@ -485,7 +249,7 @@ object KoerperBeta {
     system.step { implicit tx =>
       aural.addClient(new AuralSystem.Client {
         def auralStarted(s: Server)(implicit tx: Txn): Unit = {
-          val sound = new Sound(s).init()
+          val sound = new BetaSound[S](s, config, timbreMap).init()
           soundOpt = Some(sound)
         }
 

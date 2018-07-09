@@ -46,13 +46,13 @@ object AdHocMap {
     type S = InMemory
     val system: S = InMemory()
     val num = system.step { implicit tx =>
-      val (_num, _) = mkMap[S]()
+      val (_num, _) = mkMap[S](calcNum = true)
       _num
     }
     println(s"Number of points traversed: $num")
   }
 
-  def mkMap[S <: Sys[S]]()(implicit tx: S#Tx): (Int, SkipOctree[S, TwoDim, Key]) = {
+  def mkMap[S <: Sys[S]](calcNum: Boolean = false)(implicit tx: S#Tx): (Int, SkipOctree[S, TwoDim, Key]) = {
     type D = TwoDim
     implicit val ptView: (Key, S#Tx) => D#PointLike = (key, _) => key.pt
 
@@ -67,14 +67,14 @@ object AdHocMap {
     def loop(pt: IntPoint2D, res: Int): Int = {
       map.nearestNeighborOption(pt, mDownRight) match {
         case Some(key) =>
-          println(key)
+          // println(key)
           loop(IntPoint2D(key.pt.x + 1, key.pt.y + 1), res + 1)
 
         case None => res
       }
     }
 
-    val num = loop(IntPoint2D(0, 0), 0)
+    val num = if (calcNum) loop(IntPoint2D(0, 0), 0) else 0
     (num, map)
   }
 }

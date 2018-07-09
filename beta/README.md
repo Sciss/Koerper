@@ -15,3 +15,15 @@ cd ~/Documents/
 ```
 
 Remote desktop: `vncviewer`
+
+## building
+
+Builds with sbt against Scala 2.12.
+
+## assembly
+
+    sbt clean test:assembly
+
+## run
+
+    java -jar koerper-beta.jar
