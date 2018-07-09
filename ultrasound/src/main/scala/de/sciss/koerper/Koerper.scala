@@ -19,6 +19,7 @@ import de.sciss.desktop.DocumentHandler
 import de.sciss.file._
 import de.sciss.koerper.lucre.{Eye, EyeFrame, OscNode, OscNodeFrame, SphereGNG, SphereGNGFrame}
 import de.sciss.lucre.stm
+import de.sciss.lucre.swing.deferTx
 import de.sciss.lucre.synth.{InMemory, Sys}
 import de.sciss.mellite.gui.{ActionOpenWorkspace, EnsembleFrame}
 import de.sciss.mellite.{Application, Mellite}
@@ -97,7 +98,7 @@ object Koerper {
     if (config.cleanAux) {
       val usF = (auxDir / "us").children(_.extL == "irc")
       deleteFiles(usF)
-      val pdF = (auxDir / "us").children(_.extL == "aif")
+      val pdF = (auxDir / "pd").children(_.extL == "aif")
       deleteFiles(pdF)
     }
 
@@ -165,8 +166,19 @@ object Koerper {
   def startEye[S <: Sys[S]](eye: Eye[S])
                            (implicit tx: S#Tx, cursor: stm.Cursor[S], workspace: Workspace[S]): Unit = {
     val f = EyeFrame(eye, undecorated = true)
-    f.fullscreen  = true
-    f.run         = true
+    deferTx {
+      // why the f*ck do the windows not open in a deterministic order
+      val t = new javax.swing.Timer(4000, { _ =>
+        cursor.step { implicit tx =>
+          f.fullscreen  = true
+          f.run         = true
+        }
+      })
+      t.setRepeats(false)
+      t.start()
+    }
+//    f.fullscreen  = true
+//    f.run         = true
   }
 
   def startOscNode[S <: Sys[S]](n: OscNode[S])
