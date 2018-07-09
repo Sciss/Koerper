@@ -28,7 +28,7 @@ Or:
 
     java -jar koerper-ultrasound.jar --workspace /home/pi/Documents/projects/Koerper/aux/koerper-pi.mllt --start osc,eye
 
-    java -jar koerper-ultrasound.jar --workspace /home/hhrutz/Documents/projects/Koerper/aux/koerper-mini.mllt --start osc,stop,audio,iterate,sphere,eye
+    java -jar koerper-ultrasound.jar --clean --workspace /home/hhrutz/Documents/projects/Koerper/aux/koerper-mini.mllt --start osc,stop,audio,iterate,sphere,eye
 
 ## notes
 

@@ -1,7 +1,8 @@
 package de.sciss.koerper.lucre.impl
 
-import java.awt.Toolkit
+import java.awt.{Point, Toolkit}
 import java.awt.event.{ActionEvent, InputEvent, KeyEvent}
+import java.awt.image.BufferedImage
 
 import de.sciss.desktop
 import de.sciss.desktop.Window
@@ -88,6 +89,12 @@ object EyeFrameImpl {
           val gc = frame.getGraphicsConfiguration
           val sd = gc.getDevice
           sd.setFullScreenWindow(if (value) frame else null)
+          // "hide" cursor
+          val cursor = if (value) {
+            val cursorImg = new BufferedImage(16, 16, BufferedImage.TYPE_INT_ARGB)
+            frame.getToolkit.createCustomCursor(cursorImg, new Point(0, 0), "blank")
+          } else null
+          frame.setCursor(cursor)
         }
       }
     }
