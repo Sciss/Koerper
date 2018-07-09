@@ -60,4 +60,6 @@ rcv.action = {
 size()
 flush()
 
+rcv.close()
+
 rcv.action = (_, _) => ()
