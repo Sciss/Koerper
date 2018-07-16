@@ -59,7 +59,7 @@ final class BetaSound[S <: Sys[S]](s: Server, config: Config, timbreMap: SkipOct
     val gM = SynthGraph {
       import de.sciss.synth.Ops.stringToControl
       import de.sciss.synth.ugen._
-      val amp0    = "amp".kr(1.2).clip(0, 4)
+      val amp0    = "amp".kr(config.masterGain).clip(0, 4)
       val amp     = amp0 // Lag.kr(amp0, 1.0) // Lag.ar(amp0, 1.0)
       val in      = LeakDC.ar(In.ar(0, 3))
       val sig     = Limiter.ar(in * amp, level = config.limiter)

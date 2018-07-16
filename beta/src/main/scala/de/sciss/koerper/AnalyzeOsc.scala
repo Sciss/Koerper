@@ -42,12 +42,14 @@ object AnalyzeOsc {
 
   case class AnalysisResult(trajLenCount      : Map[Int, Int], numTrajCount   : Map[Int, Int],
                             numIndivIsecCount : Map[Int, Int], numAllIsecCount: Map[Int, Int],
-                            trajOffIsecCount  : Map[Int, Int], dimIsecCount   : Map[Int, Int]) {
+                            trajOffIsecCount  : Map[Int, Int], dimIsecCount   : Map[Int, Int],
+                            coordRanges       : Vec[(Float, Float)]) {
     override def toString: String = {
       val s1 = s"$productPrefix(\n  trajLenCount = $trajLenCount,\n  numTrajCount = $numTrajCount,"
       val s2 = s"\n  numIndivIsecCount = $numIndivIsecCount,\n  numAllIsecCount = $numAllIsecCount,"
-      val s3 = s"\n  trajOffIsecCount = $trajOffIsecCount,\n  dimIsecCount = $dimIsecCount\n)"
-      s"$s1$s2$s3"
+      val s3 = s"\n  trajOffIsecCount = $trajOffIsecCount,\n  dimIsecCount = $dimIsecCount,"
+      val s4 = s"\n  coordRanges = $coordRanges\n)"
+      s"$s1$s2$s3$s4"
     }
   }
 
@@ -84,6 +86,8 @@ object AnalyzeOsc {
     var numAllIsecCount   = Map.empty[Int, Int].withDefaultValue(0)   // num to count
     var trajOffIsecCount  = Map.empty[Int, Int].withDefaultValue(0)   // traj-offset to intersection count
     var dimIsecCount      = Map.empty[Int, Int].withDefaultValue(0)   // dim-index to ntersection count
+
+    val ranges        = Array.fill[(Float, Float)](KoerperBeta.Dimensions)(Float.PositiveInfinity, Float.NegativeInfinity)
 
     stream.foreach { case TimedMessage(_ /* time */, p) =>
       p match {
@@ -150,6 +154,12 @@ object AnalyzeOsc {
               a(3) = c3
               a(4) = c4
               a(5) = c5
+
+              for (d <- 0 until 6) {
+                val (mn0, mx0) = ranges(d)
+                ranges(d) = (math.min(mn0, a(d)), math.max(mx0, a(d)))
+              }
+
 //              a(6) = c6
 //              a(7) = c7
               a
@@ -191,7 +201,8 @@ object AnalyzeOsc {
 
     AnalysisResult(trajLenCount = trajLenCount, numTrajCount = numTrajCount,
       numIndivIsecCount = numIndivIsecCount, numAllIsecCount = numAllIsecCount,
-      trajOffIsecCount = trajOffIsecCount, dimIsecCount = dimIsecCount)
+      trajOffIsecCount = trajOffIsecCount, dimIsecCount = dimIsecCount,
+      coordRanges = ranges.toVector)
   }
 
   def readOsc(): Vec[TimedMessage] = {

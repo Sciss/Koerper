@@ -33,3 +33,11 @@ Or:
 ## notes
 
 - Due to macro compilation units issues, the Mellite workspace creation code `Session` is in the test sources instead of main sources.
+
+## calibration
+
+E.g.
+
+    -i /data/projects/Koerper/audio_work/calib-input-180711a.aif -o /data/projects/Koerper/aux/calib-180711a.aif
+    
+where the input is a 5 channel recording where nobody is in front of the sensors

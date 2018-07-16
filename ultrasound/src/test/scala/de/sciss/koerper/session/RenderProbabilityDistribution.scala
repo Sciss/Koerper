@@ -145,7 +145,7 @@ object RenderProbabilityDistribution {
 
     // XXX TODO: Testing
     val locAux        = ArtifactLocation.newConst(Koerper.auxDir)
-    val artCalib      = Artifact(locAux, Artifact.Child("calib-180608a.aif"))
+    val artCalib      = Artifact(locAux, Artifact.Child("calib-180711a.aif"))
     a.put(KeyCalibIn, mkCue(artCalib))
 
     val aDone = if (noPi) mkDoneActionNoPi[S]() else mkDoneActionPi[S]()
