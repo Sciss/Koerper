@@ -167,7 +167,7 @@ The interesting case is the first.
 
 ```
 val tr      = ??? : Trig
-val path    = msg.arg(0).cast[String]   : Trig[String]   // t.b.d.
+val path    = msg.arg[String](0, "?")   : Trig[String]   // t.b.d.
 val locBase = ArtifactLocation(":base")
 val f       = File(path)                : Trig[File]
 val art     = locBase.make(f)           : Trig[Artifact]
@@ -184,23 +184,328 @@ Let's assume something along these lines would work. Now to the more involved ca
 - `OscRadioRecSet` - this might be handled directly through an auxiliary function (copying resources)
 - `OscSetVolume` - it could be more "imperative", or using an arrow, such as
 
-
-    val vol = oscNode.select("/set-volume").arg[Double](0).getOrElse(1.0)
-    vol ---> "scene:volume".attr(1.0)
-    
+```
+val vol = oscNode.select("/set-volume").argOpt[Double](0).getOrElse(1.0)
+vol ---> "scene:volume".attr(1.0)
+```
+ 
 Let's assume it is solved similar to this.
 
 - `OscIterate` (`"/iterate", ch: Int, relay: Boolean`)
 
+```
+val dur = play()
+iterate(dur = dur, relay = relay)
+replyToSender()
 
-    val dur = play()
-    iterate(dur = dur, relay = relay)
-    replyToSender()
-    
 
-    val sel     = oscNode.select("/iterate")
-    val ch      = sel.arg[Int    ](0).getOrElse(0)
-    val relay   = sel.arg[Boolean](1).getOrElse(false)
-    
-    ...
-    
+val sel     = oscNode.select("/iterate")
+val ch      = sel.arg[Int    ](0, 0)
+val relay   = sel.arg[Boolean](1, false)
+
+...
+```
+
+With
+
+```
+def play()(implicit tx: Txn): Double = {
+  import TxnLike.peer
+
+  val ph0 = phFile()
+  if (ph0.numFrames > 4800) {
+    val fadeIn  = 0.1f
+    import numbers.Implicits._
+    val fadeOut = random.nextFloat().linLin(0, 1, 0.1f, 0.5f)
+    val start   = 0L
+    val stop    = ph0.numFrames
+    sscenePlay(ph0, ch = channel, start = start, stop = stop, fadeIn = fadeIn, fadeOut = fadeOut)
+    ph0.numFrames / SR
+  } else {
+    0.0
+  }
+}
+```
+
+which may become
+
+```
+val random = Stream[Double]("random")    // or PatAttr ?
+val SR     = 48000.0
+
+def play(): Ex[Double] = {
+  val numFrames0 = "num-frames".attr(0L)  // or, well, use an AudioCue
+  val ph0 = phFile()
+  If (numFrames0 > 4800) Then {
+    val fadeIn  = 0.1
+    val fadeOut = random.next().linLin(0, 1, 0.1, 0.5)
+    val start   = 0L
+    val stop    = numFrames0
+    scenePlay(ph0, ch = channel, start = start, stop = stop, fadeIn = fadeIn, fadeOut = fadeOut)
+    numFrames0 / SR
+  } Else {
+    0.0
+  }
+}
+```
+
+So we're having this weird hybrid of `Ex` and `Trig` again; the `Trig` is actually missing, we're constructing
+an expression for the duration, and we miss a trigger going into `scenePlay`? How is `scenePlay`?
+
+```
+def scenePlay(ref: AudioFileRef, ch: Int, start: Long, stop: Long, fadeIn: Float, fadeOut: Float)
+             (implicit tx: Txn): Unit = {
+
+  val targetOpt: Option[Group] = if (ch == 0) group1() else group2()
+  targetOpt.foreach { target =>
+    ref.acquire()
+    val bus = ch // / 6
+    target.freeAll()
+    val path    = ref.f.path
+    val buf     = Buffer.diskIn(target.server)(path = path, startFrame = start, numChannels = 2)
+    val dur     = math.max(0L, stop - start) / SR
+    // avoid clicking
+    val fdIn1   = if (fadeIn  > 0) fadeIn  else 0.01f
+    val fdOut1  = if (fadeOut > 0) fadeOut else 0.01f
+    val amp     = /* textAmpLin * */ ampChan(bus)
+    val syn     = Synth.play(diskGraph, nameHint = Some("disk"))(target = target, addAction = addToTail,
+      args = List("bus" -> bus, "buf" -> buf.id, "dur" -> dur, "fadeIn" -> fdIn1, "fadeOut" -> fdOut1, "amp" -> amp),
+      dependencies = buf :: Nil)
+    syn.onEndTxn { implicit tx =>
+      buf.dispose()
+      ref.release()
+    }
+  }
+}
+
+```
+
+The "group" is only used because we can conveniently run `freeAll`. And it's only an option because we can run
+this without the server having been booted yet. So this disappears when using SP abstractions. The `ref.acquire`
+and `ref.release` bit should also be directly supported by SP. `start` is not used, so we remove it here for
+simplicity. `ampChan` is constant one.
+
+The `scenePlay` thus perhaps translates to
+
+```
+def scenePlay(ref: AudioCue, ch: Ex[Int], stop: Ex[Long], 
+              fadeIn: Ex[Double], fadeOut: Ex[Double]): Unit = {
+
+  val bus     = ch
+  val dur     = ((stop /* - start */) / SR).max(0)
+  val fdIn1   = fadeIn .max(0.01)
+  val fdOut1  = fadeOut.max(0.01)
+  val run     = Runner("disk-graph")
+  run.runWith("disk" -> ref, "dur" -> dur, "fadeIn" -> fdIn1, "fadeOut" -> fdOut1, "bus" -> bus)
+}
+
+```
+
+More interesting, `iterate`.
+
+```
+def iterate(dur: Double, relay: Boolean)(implicit tx: InTxn): Future[Unit] = {
+  val entryOff  = playEntryMotion.step()
+  val dly       = math.max(4.0, dur * entryOff)
+  val dlyMS     = (dly * 1000).toLong
+  if (relay) client.scheduleTxn(dlyMS) { implicit tx =>
+    client.relayIterate(thisCh = channel)
+  }
+
+  if (stateRef().isDefined) {
+    // note: we don't have to "retry" anything, because the
+    // relay keeps going above, independent of rendering
+    val msg = "state still busy"
+    log(s"playLogic() - WARNING: $msg")
+    txFutureFailed(new Exception(msg))
+
+  } else {
+
+    val stateId   = stateCnt.getAndTransform(_ + 1)
+    stateRef()    = new State(stateId)
+
+    val futIter   = iterateImpl(stateId)
+
+    val timeoutMS = 150000L
+    val taskTimeout = client.scheduleTxn(timeoutMS) { implicit tx =>
+      if (stateRef().id == stateId) {
+        log(s"playLogic() - WARNING: timeout $stateId")
+        stateRef() = NoState
+        cancelRendering()
+      }
+    }
+
+    futIter.onComplete(_ => atomic { implicit tx =>
+      if (stateRef().id == stateId) {
+        stateRef() = NoState
+        taskTimeout.cancel()
+      }
+    })
+
+    futIter
+  }
+}
+```
+
+The stuff represented by `Task` (cancellable trigger) is probably straight forwarded to implement, 
+as is delaying triggers. `stateCnt` would be another stream, and we can "latch" value using the OSC message
+trigger.
+
+```
+def iterateImpl(iterId: Int)(implicit tx: InTxn): Future[Unit] = {
+  log(s"iterate($iterId)")
+
+  for {
+    _     <- dbFill()
+    instr <- atomic { implicit tx => phSelectOverwrite  ()            }
+    mat   <- atomic { implicit tx => dbFindMatch        (instr)       }
+    _     <- atomic { implicit tx => performOverwrite   (instr, mat)  }
+  } yield {
+
+    log("iterate() - done")
+    ()
+  }
+}
+```
+
+with `dbFill` for example consisting of a `queryRadioRec` followed by an FScape rendering. (Threading futures)
+
+-----------
+
+## Matching
+
+I propose something like the following to "match" arguments:
+
+
+```
+val ch    = Var[Int]()
+val relay = Var[Boolean]()
+val sel   = n.message.select("/iterate", ch, relay)
+```
+
+So that arguments to `select` (should it be `route`?) can be one of the following
+
+- `Var[A]` - most specific; open argument that captures a particular type
+- `Ex[A]` - determines a constant that must be found here
+
+It could be extended later to include `Rest` for var-args (if needed) and so on.
+
+They would each associate `A` with a type class for OSC atom decoding? Difficult, as we can only define
+select as
+
+    def select(name: VarOrEx[String], args: VarOrEx[Any]): Trig
+
+unless we overload select for all arities (up to 22 I guess)...
+
+    def select(name: VarOrEx[String]): Trig
+    def select[T1](name: VarOrEx[String], arg1: VarOrEx[T1]): Trig
+    def select[T1, T2](name: VarOrEx[String], arg1: VarOrEx[T1], args2: VarOrEx[T2]): Trig
+
+etc. But the particular implementation could be graceful (e.g. `Var[Double]` could accept float input). We might
+even introduce a `Var.Any` that could be routed at a later point.
+
+------------
+
+## Notes190424
+
+Let's assume all the OscNode is solved (we will be able to implement some sort of argument matching), to return to
+the use of persistent pattern streams, and to the koerper-alpha actions. For the latter, we have auxiliary objects
+`RecordAudioChunk` and `RenderProbabilityDistribution`. The former has a prepare and a done action. Prepare:
+
+```
+def mkPrepareAction[S <: Sys[S]]()(implicit tx: S#Tx): proc.Action[S] = {
+  proc.Action.apply[S] { u =>
+    println(s"[${new java.util.Date}] Körper: iteration begin.")
+    val locBase   = u.root.![ArtifactLocation]("base")
+    val ens       = u.root.![Ensemble]("rec-audio-chunk")
+    val countVal  = u.root.![IntObj]("iterations").value  // only used for time out
+    ens.stop()
+    val pRec      = ens.![Proc]("proc")
+    // N.B. we have a race condition when using AIFF: the done action may see
+    // the file before the header is flushed, thus reading numFrames == 0.
+    // If we use IRCAM, the header does not carry numFrames information.
+    val fmt       = new java.text.SimpleDateFormat("'us-'yyMMdd_HHmmss'.irc'", java.util.Locale.US)
+    val name      = fmt.format(new java.util.Date)
+    val child     = new java.io.File("us", name).getPath
+    val art       = Artifact(locBase, Artifact.Child(child))
+    pRec.attr.put("out", art)
+    ens.play()
+
+    tx.afterCommit { ... }  // detect time out
+  }
+}
+```
+
+With `Runner` we don't actually need the ensemble any longer, we can use the proc directly. Again we a way to
+_make_ a new object (an `Artifact`). And a way to put an object into an attribute map (so let's focus on that
+and forget about a `Runner#playWith(e: Event)` kind of thing which looks easy but is hard because of the
+mess that aural objects are).
+
+The done action of `RecordAudioChunk`:
+
+```
+def mkDoneAction[S <: Sys[S]]()(implicit tx: S#Tx): Obj[S] = {
+  proc.Action.apply[S] { u =>
+    import de.sciss.fscape.lucre.FScape
+    import de.sciss.fscape.stream.Control
+    import de.sciss.synth.proc.GenContext
+
+    println(s"[${new java.util.Date}] Körper: recording stopped.")
+
+    // store the chunk in the 'us' folder
+    val ens       = u.root.![Ensemble]("rec-audio-chunk")
+    ens.stop()
+    val pRec      = ens.![Proc]("proc")
+    val artRec    = pRec.attr.![Artifact]("out")
+    val artRecVal = artRec.value
+    val specRec   = de.sciss.synth.io.AudioFile.readSpec(artRecVal)
+    val cueRec    = AudioCue.Obj(artRec, specRec, offset = 0L, gain = 1.0)
+    cueRec.name   = artRecVal.getName
+
+    // invoke pd rendering
+    val fsc       = u.root.![FScape]("render-pd")
+    val aFsc      = fsc.attr
+    aFsc.put("audio-in", cueRec)
+    val locBase   = u.root.![ArtifactLocation]("base")
+    val fmtTab    = new java.text.SimpleDateFormat("'pd-'yyMMdd_HHmmss'.aif'", java.util.Locale.US)
+    val nameTab   = fmtTab.format(new java.util.Date)
+    val childTab  = new java.io.File("pd", nameTab).getPath
+    val artTab    = Artifact(locBase, Artifact.Child(childTab))
+    aFsc.put("table-out", artTab)
+    // XXX TODO: "calib-in"
+
+    // XXX TODO --- too much ceremony
+    val cfgFsc    = Control.Config()
+    import u.{cursor, workspace}
+    implicit val gtx: GenContext[S] = GenContext[S]
+    /* val r = */ FScape.Rendering(fsc, cfgFsc)
+
+    println(s"[${new java.util.Date}] Körper: FScape rendering started.")
+  }
+}
+```
+
+The annoyance of "recovering" objects in action B that were used in action A will be avoid if we write this
+in a single program. The recording proc uses a `Line` and `DoneAction` to "terminate itself"; obviously we can
+just use a `Delay` in the control program now.
+
+We now need a way to _make_ and `AudioCue`, and again _put attributes_ (even just the name).
+Then we have another runner for FScape, whose graph is defined in `RenderProbabilityDistribution`.
+It has again a done action, with the old version and no Raspi being `mkDoneActionNoPi`, and the new one with
+dedicated second computer being `mkDoneActionPi`. In the Pi case, we run a shell script for `scp`, copying the
+file via network, then confirm by sending an OSC message. If using one computer, there is an `Eye` instance and
+we _put an attribute_ for the new probability distribution.
+
+----------
+
+As long as we don't need multiple views of the same model at the same time, we're good just putting values in
+attribute maps; otherwise, we need a notion of `playWith(events)` (polyphony). This we already have in place
+via `Ex#--->(Attr.Like)`.
+
+## Notes190426
+
+_Case study:_ receive file path via OSC, and consequently import an audio file by that path. Play that file and
+ignore messages arriving while the file is being played
+
+
+
